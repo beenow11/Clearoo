@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Roo's face, kept inside the 66dp adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:pivotX="42" android:pivotY="48" android:rotation="-18">
+        <path android:fillColor="#FFFFA24C" android:pathData="M35,36 a7,14 0 1,0 14,0 a7,14 0 1,0 -14,0 Z" />
+        <path android:fillColor="#FFFF8FA8" android:pathData="M38.5,38 a3.5,9 0 1,0 7,0 a3.5,9 0 1,0 -7,0 Z" />
+    </group>
+    <group android:pivotX="66" android:pivotY="48" android:rotation="18">
+        <path android:fillColor="#FFFFA24C" android:pathData="M59,36 a7,14 0 1,0 14,0 a7,14 0 1,0 -14,0 Z" />
+        <path android:fillColor="#FFFF8FA8" android:pathData="M62.5,38 a3.5,9 0 1,0 7,0 a3.5,9 0 1,0 -7,0 Z" />
+    </group>
+    <path android:fillColor="#FFFFA24C" android:pathData="M29,62 a25,22 0 1,0 50,0 a25,22 0 1,0 -50,0 Z" />
+    <path android:fillColor="#FFFFE6CC" android:pathData="M40,70 a14,10 0 1,0 28,0 a14,10 0 1,0 -28,0 Z" />
+    <path android:fillColor="#99FF7F9E" android:pathData="M36.5,67 a3.5,2.2 0 1,0 7,0 a3.5,2.2 0 1,0 -7,0 Z" />
+    <path android:fillColor="#99FF7F9E" android:pathData="M64.5,67 a3.5,2.2 0 1,0 7,0 a3.5,2.2 0 1,0 -7,0 Z" />
+    <path android:fillColor="#FF3A2440" android:pathData="M41.4,59 a3.6,3.6 0 1,0 7.2,0 a3.6,3.6 0 1,0 -7.2,0 Z" />
+    <path android:fillColor="#FF3A2440" android:pathData="M59.4,59 a3.6,3.6 0 1,0 7.2,0 a3.6,3.6 0 1,0 -7.2,0 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M45.2,57.6 a1.2,1.2 0 1,0 2.4,0 a1.2,1.2 0 1,0 -2.4,0 Z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M63.2,57.6 a1.2,1.2 0 1,0 2.4,0 a1.2,1.2 0 1,0 -2.4,0 Z" />
+    <path android:fillColor="#FF3A2440" android:pathData="M51.4,66 a2.6,1.8 0 1,0 5.2,0 a2.6,1.8 0 1,0 -5.2,0 Z" />
+    <path
+        android:pathData="M49,70 Q54,75 59,70"
+        android:strokeWidth="1.8"
+        android:strokeColor="#FF3A2440"
+        android:strokeLineCap="round" />
+</vector>

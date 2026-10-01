@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Clearoo</string>
+    <string name="widget_name">Roo</string>
+    <string name="widget_description">Roo reminds you to clean your gallery and cheers on your streak.</string>
+    <string name="channel_reminder">Daily reminder</string>
+    <string name="channel_reminder_desc">Roo\'s daily nudge to clean up your gallery</string>
+</resources>
