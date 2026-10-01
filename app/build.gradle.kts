@@ -17,7 +17,21 @@ android {
         versionName = "0.2.0"
     }
 
+    signingConfigs {
+        // A fixed debug key checked into the repo, so every CI build is signed the same way
+        // and installs as an update. (Each CI runner would otherwise generate its own key.)
+        getByName("debug") {
+            storeFile = file("clearoo-debug.jks")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
