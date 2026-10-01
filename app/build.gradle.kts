@@ -6,15 +6,16 @@ plugins {
 
 android {
     namespace = "com.clearoo.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.clearoo.app"
         // Android 11+: needed for MediaStore trash requests.
         minSdk = 30
-        targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        // Google Play requires targeting a recent Android version for new apps and updates.
+        targetSdk = 36
+        versionCode = 4
+        versionName = "1.0.0"
     }
 
     signingConfigs {
@@ -26,6 +27,15 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        // Play upload key. Only CI release builds have it, via repository secrets (see docs/PLAY_STORE.md).
+        System.getenv("UPLOAD_KEYSTORE_PATH")?.let { path ->
+            create("upload") {
+                storeFile = file(path)
+                storePassword = System.getenv("UPLOAD_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("UPLOAD_KEY_ALIAS")
+                keyPassword = System.getenv("UPLOAD_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -33,7 +43,9 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.findByName("upload")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }

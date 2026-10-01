@@ -65,6 +65,10 @@ Every push builds a debug APK in GitHub Actions:
 
 Requires **Android 11+**.
 
+## Publishing on Google Play
+
+See [docs/PLAY_STORE.md](docs/PLAY_STORE.md) for the step-by-step guide. Store listing text and graphics are in [docs/play-store/](docs/play-store/), and the privacy policy is [PRIVACY.md](PRIVACY.md).
+
 ## Build locally
 
 ```bash
