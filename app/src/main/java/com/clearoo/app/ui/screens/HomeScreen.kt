@@ -66,7 +66,7 @@ import java.util.Locale
 import java.time.format.TextStyle as DayStyle
 
 @Composable
-fun HomeScreen(vm: ClearooViewModel, onStart: (Deck) -> Unit, onSettings: () -> Unit) {
+fun HomeScreen(vm: ClearooViewModel, onStart: (Deck) -> Unit, onSettings: () -> Unit, onWardrobe: () -> Unit) {
     val context = LocalContext.current
     val progress by vm.progress.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -91,6 +91,16 @@ fun HomeScreen(vm: ClearooViewModel, onStart: (Deck) -> Unit, onSettings: () -> 
             Text("Clearoo", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.gradientTint(BrandBrush))
             Spacer(Modifier.weight(1f))
             StreakBadge(streak)
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier
+                    .pressable(onClick = onWardrobe)
+                    .clip(RoundedCornerShape(50))
+                    .background(Surface2)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            ) {
+                Text("👕", style = MaterialTheme.typography.titleMedium)
+            }
             IconButton(onClick = onSettings) {
                 Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = TextLo)
             }
@@ -98,7 +108,7 @@ fun HomeScreen(vm: ClearooViewModel, onStart: (Deck) -> Unit, onSettings: () -> 
 
         Spacer(Modifier.height(12.dp))
         SpeechBubble(line, Modifier.padding(horizontal = 12.dp))
-        Mascot(mood, size = 190.dp)
+        Mascot(mood, Modifier.pressable(onClick = onWardrobe), size = 190.dp)
         Spacer(Modifier.height(8.dp))
         WeekStrip(progress.goalDays, today)
         Spacer(Modifier.height(16.dp))

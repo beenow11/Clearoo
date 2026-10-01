@@ -9,6 +9,7 @@ import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import com.clearoo.app.domain.Mood
+import com.clearoo.app.domain.Outfit
 
 /**
  * Draws Roo, Clearoo's kangaroo mascot, with plain android.graphics so the same drawing
@@ -27,19 +28,20 @@ class MascotPainter {
     private val path = Path()
     private val rect = RectF()
 
-    fun render(mood: Mood, sizePx: Int): Bitmap {
+    fun render(mood: Mood, sizePx: Int, outfit: Outfit = Outfit.CLASSIC): Bitmap {
         val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
-        draw(Canvas(bitmap), sizePx.toFloat(), mood)
+        draw(Canvas(bitmap), sizePx.toFloat(), mood, outfit = outfit)
         return bitmap
     }
 
     /** [blink] runs 0 (open) → 1 (closed). */
-    fun draw(canvas: Canvas, size: Float, mood: Mood, blink: Float = 0f) {
+    fun draw(canvas: Canvas, size: Float, mood: Mood, blink: Float = 0f, outfit: Outfit = Outfit.CLASSIC) {
         current = canvas
         canvas.save()
         canvas.scale(size / 200f, size / 200f)
 
         oval(100f, 190f, 52f, 7f, SHADOW)
+        if (outfit == Outfit.CAPE) cape()
 
         val armsUp = mood == Mood.PROUD || mood == Mood.EXCITED
         if (armsUp) raisedArms()
@@ -57,6 +59,7 @@ class MascotPainter {
         path.moveTo(74f, 152f)
         path.quadTo(100f, 168f, 126f, 152f)
         canvas.drawPath(path, stroke)
+        if (outfit == Outfit.SCARF) scarf()
         if (!armsUp) paws(mood)
 
         oval(62f, 120f, 10f, 6f, CHEEK)
@@ -68,7 +71,134 @@ class MascotPainter {
         mouth(canvas, mood)
         extras(canvas, mood)
 
+        when (outfit) {
+            Outfit.SUNGLASSES -> sunglasses()
+            Outfit.PARTY_HAT -> partyHat()
+            Outfit.WIZARD_HAT -> wizardHat()
+            Outfit.HEADPHONES -> headphones()
+            Outfit.CROWN -> crown()
+            Outfit.CLASSIC, Outfit.SCARF, Outfit.CAPE -> Unit
+        }
+
         canvas.restore()
+    }
+
+    // ---- Outfits ----
+
+    private fun cape() {
+        path.reset()
+        path.moveTo(54f, 96f)
+        path.quadTo(30f, 146f, 20f, 188f)
+        path.lineTo(180f, 188f)
+        path.quadTo(170f, 146f, 146f, 96f)
+        path.close()
+        fill.color = CAPE_RED
+        current.drawPath(path, fill)
+    }
+
+    private fun scarf() {
+        path.reset()
+        path.moveTo(42f, 144f)
+        path.quadTo(100f, 166f, 158f, 144f)
+        path.lineTo(158f, 158f)
+        path.quadTo(100f, 180f, 42f, 158f)
+        path.close()
+        fill.color = SCARF_RED
+        current.drawPath(path, fill)
+        current.save()
+        current.rotate(-12f, 126f, 160f)
+        rect.set(118f, 158f, 134f, 192f)
+        current.drawRoundRect(rect, 4f, 4f, fill)
+        fill.color = SCARF_STRIPE
+        rect.set(118f, 170f, 134f, 176f)
+        current.drawRect(rect, fill)
+        current.restore()
+    }
+
+    private fun sunglasses() {
+        fill.color = SHADES
+        rect.set(58f, 86f, 94f, 112f)
+        current.drawRoundRect(rect, 10f, 10f, fill)
+        rect.set(106f, 86f, 142f, 112f)
+        current.drawRoundRect(rect, 10f, 10f, fill)
+        stroke.color = SHADES
+        stroke.strokeWidth = 4f
+        current.drawLine(94f, 94f, 106f, 94f, stroke)
+        current.drawLine(58f, 92f, 42f, 88f, stroke)
+        current.drawLine(142f, 92f, 158f, 88f, stroke)
+        stroke.color = SHINE
+        stroke.strokeWidth = 3f
+        current.drawLine(66f, 104f, 76f, 92f, stroke)
+        current.drawLine(114f, 104f, 124f, 92f, stroke)
+    }
+
+    private fun partyHat() {
+        current.save()
+        current.rotate(-10f, 100f, 58f)
+        path.reset()
+        path.moveTo(100f, 10f)
+        path.lineTo(124f, 58f)
+        path.quadTo(100f, 64f, 76f, 58f)
+        path.close()
+        fill.color = PARTY_PINK
+        current.drawPath(path, fill)
+        current.save()
+        current.clipPath(path)
+        stroke.color = SPARKLE
+        stroke.strokeWidth = 6f
+        current.drawLine(70f, 36f, 130f, 26f, stroke)
+        current.drawLine(70f, 54f, 130f, 44f, stroke)
+        current.restore()
+        oval(100f, 10f, 7f, 7f, SPARKLE)
+        current.restore()
+    }
+
+    private fun wizardHat() {
+        current.save()
+        current.rotate(-8f, 100f, 56f)
+        oval(100f, 56f, 42f, 9f, WIZARD_DARK)
+        path.reset()
+        path.moveTo(110f, 2f)
+        path.quadTo(96f, 30f, 76f, 54f)
+        path.lineTo(124f, 54f)
+        path.quadTo(112f, 30f, 110f, 2f)
+        path.close()
+        fill.color = WIZARD
+        current.drawPath(path, fill)
+        sparkle(current, 98f, 38f, 7f)
+        sparkle(current, 112f, 22f, 4f)
+        current.restore()
+    }
+
+    private fun headphones() {
+        stroke.color = SHADES
+        stroke.strokeWidth = 9f
+        path.reset()
+        path.moveTo(38f, 106f)
+        path.cubicTo(30f, 26f, 170f, 26f, 162f, 106f)
+        current.drawPath(path, stroke)
+        oval(36f, 110f, 11f, 19f, VIOLET)
+        oval(164f, 110f, 11f, 19f, VIOLET)
+    }
+
+    private fun crown() {
+        path.reset()
+        path.moveTo(74f, 60f)
+        path.lineTo(74f, 34f)
+        path.lineTo(87f, 47f)
+        path.lineTo(100f, 26f)
+        path.lineTo(113f, 47f)
+        path.lineTo(126f, 34f)
+        path.lineTo(126f, 60f)
+        path.close()
+        fill.color = SPARKLE
+        current.drawPath(path, fill)
+        oval(74f, 34f, 4f, 4f, SPARKLE)
+        oval(100f, 26f, 4f, 4f, SPARKLE)
+        oval(126f, 34f, 4f, 4f, SPARKLE)
+        oval(100f, 51f, 4.5f, 4.5f, HEART)
+        oval(85f, 53f, 3f, 3f, VIOLET)
+        oval(115f, 53f, 3f, 3f, VIOLET)
     }
 
     /** The canvas being drawn on; set at the start of [draw]. */
@@ -267,5 +397,14 @@ class MascotPainter {
         const val WHITE = 0xFFFFFFFF.toInt()
         const val ZZZ = 0xFFD9D0FF.toInt()
         const val SHADOW = 0x33000000
+        const val CAPE_RED = 0xFFE63950.toInt()
+        const val SCARF_RED = 0xFFFF4D6D.toInt()
+        const val SCARF_STRIPE = 0xFFFFE6CC.toInt()
+        const val SHADES = 0xFF1E1530.toInt()
+        const val SHINE = 0x88FFFFFF.toInt()
+        const val PARTY_PINK = 0xFFFF5F9E.toInt()
+        const val WIZARD = 0xFF6E4BFF.toInt()
+        const val WIZARD_DARK = 0xFF4B2E83.toInt()
+        const val VIOLET = 0xFF8E7CFF.toInt()
     }
 }

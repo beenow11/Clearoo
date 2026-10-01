@@ -8,9 +8,11 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.clearoo.app.domain.NO_DAY
+import com.clearoo.app.domain.Outfit
 import com.clearoo.app.domain.Progress
 import com.clearoo.app.domain.StreakRules
 import kotlinx.coroutines.flow.Flow
@@ -25,6 +27,7 @@ data class AppSettings(
     val dailyGoal: Int = StreakRules.DEFAULT_GOAL,
     val permanentDelete: Boolean = false,
     val onboarded: Boolean = false,
+    val outfit: Outfit = Outfit.CLASSIC,
 )
 
 class PrefsRepository(context: Context) {
@@ -48,6 +51,7 @@ class PrefsRepository(context: Context) {
         val DAILY_GOAL = intPreferencesKey("daily_goal")
         val PERMANENT_DELETE = booleanPreferencesKey("permanent_delete")
         val ONBOARDED = booleanPreferencesKey("onboarded")
+        val OUTFIT = stringPreferencesKey("outfit")
     }
 
     val progress: Flow<Progress> = store.data.map { it.toProgress() }.distinctUntilChanged()
@@ -60,6 +64,7 @@ class PrefsRepository(context: Context) {
             dailyGoal = p[Keys.DAILY_GOAL] ?: defaults.dailyGoal,
             permanentDelete = p[Keys.PERMANENT_DELETE] ?: defaults.permanentDelete,
             onboarded = p[Keys.ONBOARDED] ?: defaults.onboarded,
+            outfit = p[Keys.OUTFIT]?.let { name -> Outfit.entries.firstOrNull { it.name == name } } ?: defaults.outfit,
         )
     }.distinctUntilChanged()
 
@@ -108,6 +113,10 @@ class PrefsRepository(context: Context) {
 
     suspend fun setPermanentDelete(enabled: Boolean) {
         store.edit { p -> p[Keys.PERMANENT_DELETE] = enabled }
+    }
+
+    suspend fun setOutfit(outfit: Outfit) {
+        store.edit { p -> p[Keys.OUTFIT] = outfit.name }
     }
 
     suspend fun setOnboarded() {

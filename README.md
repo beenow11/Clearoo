@@ -33,6 +33,26 @@ evening and celebrates your streak.
 - **Roo's pick** highlights the deck (other than Biggest) that would free the most space.
 - **Favourites are never shown.** Anything you've starred in your gallery app is skipped.
 
+### v0.3: Roo's wardrobe
+
+- **8 outfits** that unlock as you go. Locked ones show as a faded preview with a progress bar.
+
+  | Outfit | Unlocks at |
+  |---|---|
+  | 🦘 Classic Roo | Always available |
+  | 🎉 Party hat | 3-day streak |
+  | 🧣 Cosy scarf | 100 items deleted |
+  | 😎 Shades | 7-day streak |
+  | 🧙 Wizard hat | 1 GB freed |
+  | 🎧 Headphones | 14-day streak |
+  | 🦸 Hero cape | 500 items deleted |
+  | 👑 Crown | 30-day streak |
+
+- **Unlocks use your best streak**, so losing a streak never takes an outfit away.
+- **Roo wears the outfit everywhere:** in the app, on the home-screen widget and in the daily notification.
+- **New unlocks are celebrated** after you clear the bin, with a one-tap "try it on".
+- **To open the wardrobe,** tap Roo or the 👕 button on the home screen.
+
 Everything runs on the device. No accounts, no uploads.
 
 ## Install
@@ -70,7 +90,7 @@ app/src/main/java/com/clearoo/app/
 
 ## Roadmap
 
-- More Roo: animated widget states, outfits unlocked by streak milestones
+- More Roo: animated widget states, more outfits
 - iOS via Compose Multiplatform, sharing the domain layer
 
 ## Credits

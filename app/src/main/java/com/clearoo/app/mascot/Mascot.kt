@@ -24,13 +24,18 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.staticCompositionLocalOf
 import com.clearoo.app.domain.Mood
+import com.clearoo.app.domain.Outfit
 import kotlinx.coroutines.delay
 import kotlin.random.Random
 
-/** Roo, alive: idles with a gentle hop, blinks, and squishes whenever the mood changes. */
+/** The outfit Roo is wearing, provided once at the app root. */
+val LocalOutfit = staticCompositionLocalOf { Outfit.CLASSIC }
+
+/** Roo, alive: idles with a gentle hop, blinks, and squishes whenever the mood or outfit changes. */
 @Composable
-fun Mascot(mood: Mood, modifier: Modifier = Modifier, size: Dp = 160.dp) {
+fun Mascot(mood: Mood, modifier: Modifier = Modifier, size: Dp = 160.dp, outfit: Outfit = LocalOutfit.current) {
     val painter = remember { MascotPainter() }
 
     val idle = rememberInfiniteTransition(label = "idle")
@@ -61,7 +66,7 @@ fun Mascot(mood: Mood, modifier: Modifier = Modifier, size: Dp = 160.dp) {
     }
 
     val pop = remember { Animatable(1f) }
-    LaunchedEffect(mood) {
+    LaunchedEffect(mood, outfit) {
         pop.snapTo(0.82f)
         pop.animateTo(1f, spring(dampingRatio = 0.35f, stiffness = 420f))
     }
@@ -76,6 +81,6 @@ fun Mascot(mood: Mood, modifier: Modifier = Modifier, size: Dp = 160.dp) {
                 scaleY = pop.value * (1f - 0.02f * (1f - bob))
             },
     ) {
-        drawIntoCanvas { painter.draw(it.nativeCanvas, this.size.minDimension, mood, blink) }
+        drawIntoCanvas { painter.draw(it.nativeCanvas, this.size.minDimension, mood, blink, outfit) }
     }
 }

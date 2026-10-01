@@ -17,6 +17,8 @@ import com.clearoo.app.domain.Deck
 import com.clearoo.app.domain.Lines
 import com.clearoo.app.domain.Mood
 import com.clearoo.app.domain.MoodRules
+import com.clearoo.app.domain.Outfit
+import com.clearoo.app.domain.OutfitRules
 import com.clearoo.app.domain.Progress
 import com.clearoo.app.domain.StreakRules
 import com.clearoo.app.notify.Notifications
@@ -42,6 +44,7 @@ data class CleanResult(
     val streak: Int,
     val streakGrew: Boolean,
     val goalReached: Boolean,
+    val unlocked: List<Outfit> = emptyList(),
 )
 
 class ClearooViewModel(app: Application) : AndroidViewModel(app) {
@@ -206,6 +209,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
                 streakGrew = !StreakRules.securedToday(before, today) && StreakRules.securedToday(after, today),
                 goalReached = StreakRules.deletedToday(before, today) < goal &&
                     StreakRules.deletedToday(after, today) >= goal,
+                unlocked = OutfitRules.newlyUnlocked(before, after),
             )
             refreshWidget()
             media.invalidate()
@@ -236,6 +240,15 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Only unlocked outfits can be worn. */
+    fun wear(outfit: Outfit) {
+        if (!OutfitRules.isUnlocked(outfit, progress.value)) return
+        viewModelScope.launch {
+            prefs.setOutfit(outfit)
+            refreshWidget()
+        }
+    }
+
     fun setPermanentDelete(enabled: Boolean) {
         viewModelScope.launch { prefs.setPermanentDelete(enabled) }
     }
@@ -252,7 +265,8 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         val p = progress.value
         val goal = settings.value?.dailyGoal ?: StreakRules.DEFAULT_GOAL
         val mood = MoodRules.moodFor(p, today, LocalTime.now().hour, goal)
-        Notifications.showReminder(getApplication(), mood, StreakRules.currentStreak(p, today), System.nanoTime())
+        val outfit = settings.value?.outfit ?: Outfit.CLASSIC
+        Notifications.showReminder(getApplication(), mood, StreakRules.currentStreak(p, today), System.nanoTime(), outfit)
     }
 
     private suspend fun refreshWidget() {

@@ -20,7 +20,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val today = LocalDate.now().toEpochDay()
         if (!StreakRules.securedToday(progress, today)) {
             val mood = MoodRules.moodFor(progress, today, LocalTime.now().hour, settings.dailyGoal)
-            Notifications.showReminder(applicationContext, mood, StreakRules.currentStreak(progress, today), today)
+            Notifications.showReminder(applicationContext, mood, StreakRules.currentStreak(progress, today), today, settings.outfit)
         }
         runCatching { RooWidget.refresh(applicationContext) }
         return Result.success()

@@ -12,6 +12,7 @@ import com.clearoo.app.MainActivity
 import com.clearoo.app.R
 import com.clearoo.app.domain.Lines
 import com.clearoo.app.domain.Mood
+import com.clearoo.app.domain.Outfit
 import com.clearoo.app.mascot.MascotPainter
 import com.clearoo.app.util.Perms
 
@@ -29,7 +30,7 @@ object Notifications {
     }
 
     @SuppressLint("MissingPermission")
-    fun showReminder(context: Context, mood: Mood, streak: Int, seed: Long) {
+    fun showReminder(context: Context, mood: Mood, streak: Int, seed: Long, outfit: Outfit) {
         if (!Perms.hasNotifications(context)) return
         val (title, text) = Lines.notification(mood, streak, seed)
         val open = Intent(context, MainActivity::class.java).apply {
@@ -41,7 +42,7 @@ object Notifications {
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_roo)
-            .setLargeIcon(MascotPainter().render(mood, 192))
+            .setLargeIcon(MascotPainter().render(mood, 192, outfit))
             .setColor(0xFFFF5F6D.toInt())
             .setContentTitle(title)
             .setContentText(text)

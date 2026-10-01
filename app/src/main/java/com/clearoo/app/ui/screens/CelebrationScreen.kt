@@ -26,7 +26,10 @@ import com.clearoo.app.ui.ClearooViewModel
 import com.clearoo.app.ui.components.Confetti
 import com.clearoo.app.ui.components.GhostButton
 import com.clearoo.app.ui.components.GradientButton
+import com.clearoo.app.ui.components.Pill
 import com.clearoo.app.ui.components.SpeechBubble
+import com.clearoo.app.ui.components.pressable
+import com.clearoo.app.ui.theme.Violet
 import com.clearoo.app.ui.components.gradientTint
 import com.clearoo.app.ui.theme.BrandBrush
 import com.clearoo.app.ui.theme.Flame
@@ -35,7 +38,7 @@ import com.clearoo.app.ui.theme.TextLo
 import com.clearoo.app.util.Fmt
 
 @Composable
-fun CelebrationScreen(vm: ClearooViewModel, onKeepGoing: () -> Unit, onDone: () -> Unit) {
+fun CelebrationScreen(vm: ClearooViewModel, onKeepGoing: () -> Unit, onDone: () -> Unit, onWardrobe: () -> Unit) {
     val result = vm.lastResult
     val pop = remember { Animatable(0.4f) }
     LaunchedEffect(result) { pop.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 260f)) }
@@ -49,15 +52,17 @@ fun CelebrationScreen(vm: ClearooViewModel, onKeepGoing: () -> Unit, onDone: () 
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
+            val unlocked = result?.unlocked?.lastOrNull()
             val line = when {
                 result == null -> "Cleaning up… 🧹"
+                unlocked != null -> "Ooh, a new outfit! ${unlocked.emoji}"
                 result.streakGrew && result.streak > 1 -> "${result.streak}-day streak! You're on fire 🔥"
                 result.streakGrew -> "Streak started! See you tomorrow 🔥"
                 result.goalReached -> "Daily goal smashed! 🏆"
                 else -> "Woohoo! Your phone says thanks ✨"
             }
             SpeechBubble(line)
-            Mascot(Mood.PROUD, size = 220.dp)
+            if (unlocked != null) Mascot(Mood.EXCITED, size = 220.dp, outfit = unlocked) else Mascot(Mood.PROUD, size = 220.dp)
             Spacer(Modifier.height(12.dp))
             if (result != null) {
                 Text(
@@ -80,6 +85,17 @@ fun CelebrationScreen(vm: ClearooViewModel, onKeepGoing: () -> Unit, onDone: () 
                     Spacer(Modifier.height(8.dp))
                     Text("🔥 ${result.streak}-day streak", style = MaterialTheme.typography.titleLarge, color = Flame)
                 }
+            }
+            if (unlocked != null) {
+                Spacer(Modifier.height(16.dp))
+                Pill(
+                    "🎁 Unlocked: ${unlocked.title}. Tap to try it on",
+                    Violet,
+                    Modifier.pressable {
+                        vm.wear(unlocked)
+                        onWardrobe()
+                    },
+                )
             }
             Spacer(Modifier.height(36.dp))
             GradientButton("Keep swiping", onKeepGoing)

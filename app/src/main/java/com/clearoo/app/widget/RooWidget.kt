@@ -57,7 +57,7 @@ class RooWidget : GlanceAppWidget() {
         val today = LocalDate.now().toEpochDay()
         val mood = MoodRules.moodFor(progress, today, LocalTime.now().hour, settings.dailyGoal)
         val state = WidgetState(
-            roo = MascotPainter().render(mood, 240),
+            roo = MascotPainter().render(mood, 240, settings.outfit),
             line = Lines.widget(mood),
             streak = StreakRules.currentStreak(progress, today),
             deleted = StreakRules.deletedToday(progress, today),
