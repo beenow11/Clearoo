@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -148,7 +149,14 @@ fun SettingsScreen(vm: ClearooViewModel, onBack: () -> Unit) {
                 Switch(
                     checked = s.permanentDelete,
                     onCheckedChange = vm::setPermanentDelete,
-                    colors = SwitchDefaults.colors(checkedTrackColor = Coral),
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Coral,
+                        checkedBorderColor = Coral,
+                        uncheckedThumbColor = TextLo,
+                        uncheckedTrackColor = Surface2,
+                        uncheckedBorderColor = TextLo,
+                    ),
                 )
             }
             if (Build.VERSION.SDK_INT >= 31) {

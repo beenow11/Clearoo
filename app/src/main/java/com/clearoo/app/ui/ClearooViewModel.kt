@@ -13,6 +13,7 @@ import com.clearoo.app.data.GallerySummary
 import com.clearoo.app.data.MediaItem
 import com.clearoo.app.data.MediaRepository
 import com.clearoo.app.data.PrefsRepository
+import com.clearoo.app.domain.Deck
 import com.clearoo.app.domain.Lines
 import com.clearoo.app.domain.Mood
 import com.clearoo.app.domain.MoodRules
@@ -21,6 +22,7 @@ import com.clearoo.app.domain.StreakRules
 import com.clearoo.app.notify.Notifications
 import com.clearoo.app.notify.ReminderScheduler
 import com.clearoo.app.widget.RooWidget
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -69,30 +71,59 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var gallery by mutableStateOf<GallerySummary?>(null)
         private set
+    var deckSummaries by mutableStateOf<Map<Deck, GallerySummary>>(emptyMap())
+        private set
+    /** Which smart deck the cards come from. */
+    var activeDeck by mutableStateOf(Deck.RANDOM)
+        private set
     var lastResult by mutableStateOf<CleanResult?>(null)
         private set
 
     private val history = ArrayDeque<SwipeRecord>()
-    private val seen = HashSet<Long>()
+    /** Swiped (kept or binned) this session, so reloads never repeat a card. */
+    private val swiped = HashSet<Long>()
     private var swipeCount = 0L
+    private var loadJob: Job? = null
+    /** Bumped on every deck switch so a slow load for the old deck is dropped. */
+    private var generation = 0
 
     private fun today() = LocalDate.now().toEpochDay()
 
     fun refreshGallery() {
-        viewModelScope.launch { gallery = runCatching { media.summary() }.getOrNull() }
+        viewModelScope.launch {
+            gallery = runCatching { media.summary() }.getOrNull()
+            deckSummaries = runCatching { media.deckSummaries(System.currentTimeMillis()) }.getOrDefault(emptyMap())
+        }
     }
 
     fun ensureDeck() {
         if (deck.isEmpty()) loadMore()
     }
 
+    /** Switches to [mode]; the bin and undo history carry over. */
+    fun startDeck(mode: Deck) {
+        if (mode == activeDeck && deck.isNotEmpty()) return
+        loadJob?.cancel()
+        generation++
+        deckLoading = false
+        activeDeck = mode
+        deck.clear()
+        lastUndone = null
+        deckExhausted = false
+        loadMore()
+    }
+
     private fun loadMore() {
         if (deckLoading) return
         deckLoading = true
-        viewModelScope.launch {
-            val exclude = prefs.keptIds.first() + seen + pending.map { it.id }
-            val batch = runCatching { media.randomBatch(BATCH_SIZE, exclude) }.getOrDefault(emptyList())
-            batch.forEach { seen += it.id }
+        val mode = activeDeck
+        val gen = generation
+        loadJob = viewModelScope.launch {
+            val exclude = prefs.keptIds.first() + swiped + pending.map { it.id } + deck.map { it.id }
+            val batch = runCatching {
+                media.batch(mode, exclude, BATCH_SIZE, System.currentTimeMillis())
+            }.getOrDefault(emptyList())
+            if (gen != generation) return@launch
             deck.addAll(batch)
             deckExhausted = deck.isEmpty()
             deckLoading = false
@@ -102,6 +133,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
     fun swipe(item: MediaItem, keep: Boolean) {
         if (deck.firstOrNull()?.id != item.id) return
         deck.removeAt(0)
+        swiped += item.id
         history.addLast(SwipeRecord(item, keep))
         if (history.size > MAX_UNDO) history.removeFirst()
         canUndo = true
@@ -122,6 +154,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
 
     fun undo() {
         val record = history.removeLastOrNull() ?: return
+        swiped -= record.item.id
         canUndo = history.isNotEmpty()
         if (record.keep) {
             viewModelScope.launch {
@@ -175,7 +208,8 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
                     StreakRules.deletedToday(after, today) >= goal,
             )
             refreshWidget()
-            gallery = runCatching { media.summary() }.getOrNull()
+            media.invalidate()
+            refreshGallery()
         }
     }
 
@@ -209,7 +243,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
     fun resetKept() {
         viewModelScope.launch {
             prefs.clearKept()
-            seen.clear()
+            swiped.clear()
         }
     }
 

@@ -3,21 +3,34 @@ package com.clearoo.app.data
 import android.content.ContentUris
 import android.content.Context
 import android.content.IntentSender
+import android.graphics.Bitmap
+import android.graphics.Color
 import android.net.Uri
 import android.provider.MediaStore
+import android.util.Size
+import com.clearoo.app.domain.Blur
+import com.clearoo.app.domain.Deck
+import com.clearoo.app.domain.DeckRules
+import com.clearoo.app.domain.MediaMeta
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 data class MediaItem(
-    val id: Long,
+    val meta: MediaMeta,
     val uri: Uri,
-    val isVideo: Boolean,
-    val sizeBytes: Long,
-    val takenAtMillis: Long,
-    val displayName: String,
-    val album: String?,
     val durationMs: Long,
-)
+    /** Why this card is in the deck, e.g. "👯 Look-alike 2/3". */
+    val badge: String? = null,
+) {
+    val id get() = meta.id
+    val isVideo get() = meta.isVideo
+    val sizeBytes get() = meta.sizeBytes
+    val takenAtMillis get() = meta.takenAtMillis
+    val displayName get() = meta.displayName
+    val album get() = meta.album
+}
 
 data class GallerySummary(val count: Int, val bytes: Long)
 
@@ -28,19 +41,38 @@ class MediaRepository(context: Context) {
         "${MediaStore.Files.FileColumns.MEDIA_TYPE} IN (" +
             "${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}, ${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO})"
 
-    private data class Candidate(val id: Long, val size: Long)
+    private val lock = Mutex()
+    private var cache: List<MediaItem>? = null
+    /** Blur scores by id; survive deck reloads so photos are only scanned once per run. */
+    private val blurScores = HashMap<Long, Double>()
 
-    suspend fun summary(): GallerySummary = withContext(Dispatchers.IO) {
-        val all = candidates()
-        GallerySummary(all.size, all.sumOf { it.size })
+    /** Forget the cached gallery, e.g. after items were trashed. */
+    fun invalidate() {
+        cache = null
     }
 
-    /** A random batch of photos/videos, skipping anything in [exclude]. */
-    suspend fun randomBatch(count: Int, exclude: Set<Long>): List<MediaItem> = withContext(Dispatchers.IO) {
-        val picked = candidates().filter { it.id !in exclude }.shuffled().take(count)
-        if (picked.isEmpty()) return@withContext emptyList()
-        val details = details(picked.map { it.id })
-        picked.mapNotNull { details[it.id] }
+    suspend fun summary(): GallerySummary {
+        val all = all()
+        return GallerySummary(all.size, all.sumOf { it.sizeBytes })
+    }
+
+    /** Count and size per deck. Blurry is left out: it is only known after a scan. */
+    suspend fun deckSummaries(now: Long): Map<Deck, GallerySummary> = withContext(Dispatchers.Default) {
+        val metas = all().map { it.meta }
+        Deck.entries.filter { it != Deck.BLURRY }.associateWith { deck ->
+            val members = DeckRules.members(deck, metas, now)
+            GallerySummary(members.size, members.sumOf { it.sizeBytes })
+        }
+    }
+
+    suspend fun batch(deck: Deck, exclude: Set<Long>, count: Int, now: Long): List<MediaItem> {
+        val all = all()
+        val byId = all.associateBy { it.id }
+        val metas = all.map { it.meta }
+        if (deck == Deck.BLURRY) return blurryBatch(metas, byId, exclude, count)
+        return withContext(Dispatchers.Default) {
+            DeckRules.pick(deck, metas, exclude, count, now).mapNotNull { p -> byId[p.meta.id]?.copy(badge = p.badge) }
+        }
     }
 
     /**
@@ -57,18 +89,43 @@ class MediaRepository(context: Context) {
         return pending.intentSender
     }
 
-    private fun candidates(): List<Candidate> {
-        val projection = arrayOf(MediaStore.Files.FileColumns._ID, MediaStore.MediaColumns.SIZE)
-        val out = ArrayList<Candidate>()
-        resolver.query(filesUri, projection, mediaSelection, null, null)?.use { c ->
-            val idCol = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
-            val sizeCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
-            while (c.moveToNext()) out += Candidate(c.getLong(idCol), c.getLong(sizeCol))
+    /** Scores a random sample of photos and returns the blurriest. */
+    private suspend fun blurryBatch(
+        metas: List<MediaMeta>,
+        byId: Map<Long, MediaItem>,
+        exclude: Set<Long>,
+        count: Int,
+    ): List<MediaItem> = withContext(Dispatchers.IO) {
+        val candidates = metas.filter { it.id !in exclude && !it.isFavorite && DeckRules.isBlurCandidate(it) }
+        candidates.filter { it.id !in blurScores }.shuffled().take(BLUR_SAMPLE).forEach { m ->
+            byId[m.id]?.let { blurScores[m.id] = runCatching { blurScore(it.uri) }.getOrDefault(Double.MAX_VALUE) }
         }
-        return out
+        candidates
+            .mapNotNull { m -> blurScores[m.id]?.takeIf { it < Blur.THRESHOLD }?.let { m to it } }
+            .sortedBy { it.second }
+            .take(count)
+            .mapNotNull { (m, _) -> byId[m.id]?.copy(badge = "😵 Looks blurry") }
     }
 
-    private fun details(ids: List<Long>): Map<Long, MediaItem> {
+    private fun blurScore(uri: Uri): Double {
+        var bitmap = resolver.loadThumbnail(uri, Size(BLUR_PX, BLUR_PX), null)
+        if (bitmap.config == Bitmap.Config.HARDWARE) bitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        val w = bitmap.width
+        val h = bitmap.height
+        val pixels = IntArray(w * h)
+        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+        val luma = IntArray(pixels.size) { i ->
+            val c = pixels[i]
+            (Color.red(c) * 299 + Color.green(c) * 587 + Color.blue(c) * 114) / 1000
+        }
+        return Blur.laplacianVariance(luma, w, h)
+    }
+
+    private suspend fun all(): List<MediaItem> = lock.withLock {
+        cache ?: withContext(Dispatchers.IO) { query() }.also { cache = it }
+    }
+
+    private fun query(): List<MediaItem> {
         val projection = arrayOf(
             MediaStore.Files.FileColumns._ID,
             MediaStore.Files.FileColumns.MEDIA_TYPE,
@@ -77,11 +134,12 @@ class MediaRepository(context: Context) {
             MediaStore.MediaColumns.DATE_ADDED,
             MediaStore.MediaColumns.DISPLAY_NAME,
             MediaStore.MediaColumns.BUCKET_DISPLAY_NAME,
+            MediaStore.MediaColumns.RELATIVE_PATH,
             MediaStore.MediaColumns.DURATION,
+            MediaStore.MediaColumns.IS_FAVORITE,
         )
-        val selection = "$mediaSelection AND ${MediaStore.Files.FileColumns._ID} IN (${ids.joinToString(",")})"
-        val out = HashMap<Long, MediaItem>()
-        resolver.query(filesUri, projection, selection, null, null)?.use { c ->
+        val out = ArrayList<MediaItem>()
+        resolver.query(filesUri, projection, mediaSelection, null, null)?.use { c ->
             val idCol = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns._ID)
             val typeCol = c.getColumnIndexOrThrow(MediaStore.Files.FileColumns.MEDIA_TYPE)
             val sizeCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
@@ -89,27 +147,31 @@ class MediaRepository(context: Context) {
             val addedCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
             val nameCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
             val albumCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
+            val pathCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
             val durationCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DURATION)
+            val favoriteCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.IS_FAVORITE)
             while (c.moveToNext()) {
                 val id = c.getLong(idCol)
                 val isVideo = c.getInt(typeCol) == MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO
-                val taken = c.getLong(takenCol).takeIf { it > 0 } ?: (c.getLong(addedCol) * 1000)
-                out[id] = MediaItem(
+                val meta = MediaMeta(
                     id = id,
-                    uri = ContentUris.withAppendedId(
-                        if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-                        else MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                        id,
-                    ),
                     isVideo = isVideo,
                     sizeBytes = c.getLong(sizeCol),
-                    takenAtMillis = taken,
+                    takenAtMillis = c.getLong(takenCol).takeIf { it > 0 } ?: (c.getLong(addedCol) * 1000),
                     displayName = c.getString(nameCol) ?: "",
                     album = c.getString(albumCol),
-                    durationMs = c.getLong(durationCol),
+                    relativePath = c.getString(pathCol),
+                    isFavorite = c.getInt(favoriteCol) == 1,
                 )
+                val collection = if (isVideo) MediaStore.Video.Media.EXTERNAL_CONTENT_URI else MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+                out += MediaItem(meta, ContentUris.withAppendedId(collection, id), c.getLong(durationCol))
             }
         }
         return out
+    }
+
+    private companion object {
+        const val BLUR_SAMPLE = 120
+        const val BLUR_PX = 256
     }
 }

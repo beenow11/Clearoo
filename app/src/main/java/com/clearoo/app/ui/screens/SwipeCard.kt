@@ -198,6 +198,10 @@ fun MediaCard(
             }
         }
 
+        item.badge?.let {
+            Pill(it, Color(0x99000000), Modifier.align(Alignment.TopStart).padding(16.dp))
+        }
+
         if (item.isVideo) {
             Row(
                 Modifier.align(Alignment.TopEnd).padding(16.dp),

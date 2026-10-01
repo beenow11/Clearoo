@@ -10,13 +10,16 @@ import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 object Fmt {
-    fun bytes(b: Long): String {
+    fun bytes(b: Long): String = bytesParts(b).let { (n, unit) -> "$n $unit" }
+
+    /** "173.5" to "MB": lets tight layouts put the unit on its own line. */
+    fun bytesParts(b: Long): Pair<String, String> {
         val kb = 1024.0
         return when {
-            b < kb -> "$b B"
-            b < kb * kb -> String.format(Locale.getDefault(), "%.0f KB", b / kb)
-            b < kb * kb * kb -> String.format(Locale.getDefault(), "%.1f MB", b / (kb * kb))
-            else -> String.format(Locale.getDefault(), "%.2f GB", b / (kb * kb * kb))
+            b < kb -> "$b" to "B"
+            b < kb * kb -> String.format(Locale.getDefault(), "%.0f", b / kb) to "KB"
+            b < kb * kb * kb -> String.format(Locale.getDefault(), "%.1f", b / (kb * kb)) to "MB"
+            else -> String.format(Locale.getDefault(), "%.2f", b / (kb * kb * kb)) to "GB"
         }
     }
 

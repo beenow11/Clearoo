@@ -19,6 +19,20 @@ evening and celebrates your streak.
 - **Daily notification** at a time you choose (evening by default). It's skipped if today's streak is already secured. Tapping it opens straight into swiping.
 - **Optional one-tap clearing** (Android 12+). Grant "Media management" in Settings to skip Android's delete confirmation.
 
+### v0.2: Smart decks
+
+- **Quick mix** is the main "Start swiping" button: a random handful of photos and videos.
+- **Smart decks** on the home screen, each showing its item count and size:
+  - 🐘 **Biggest**: largest files first, for the most space per swipe
+  - 📸 **Screenshots**: screenshots and screen recordings
+  - 💬 **Chat media**: WhatsApp, Telegram, Instagram and other chat apps, plus Downloads
+  - 👯 **Look-alikes**: burst and near-duplicate shots, shown back to back ("Look-alike 2/3")
+  - 😵 **Blurry**: Roo scans a sample of photos and offers the blurriest
+  - 🕰️ **Old memories**: photos older than 2 years, oldest first
+  - 🎬 **Videos**: biggest first
+- **Roo's pick** highlights the deck (other than Biggest) that would free the most space.
+- **Favourites are never shown.** Anything you've starred in your gallery app is skipped.
+
 Everything runs on the device. No accounts, no uploads.
 
 ## Install
@@ -56,7 +70,6 @@ app/src/main/java/com/clearoo/app/
 
 ## Roadmap
 
-- **v2 smart picks:** largest files first, screenshots, WhatsApp media, near-duplicate bursts, blurry shots
 - More Roo: animated widget states, outfits unlocked by streak milestones
 - iOS via Compose Multiplatform, sharing the domain layer
 

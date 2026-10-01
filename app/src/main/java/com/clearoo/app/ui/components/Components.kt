@@ -209,8 +209,15 @@ fun StatTile(emoji: String, value: String, label: String, modifier: Modifier = M
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         Text(emoji, style = MaterialTheme.typography.headlineSmall)
-        Text(value, style = MaterialTheme.typography.titleLarge, color = TextHi, maxLines = 1)
-        Text(label, style = MaterialTheme.typography.bodySmall, color = TextLo, maxLines = 1)
+        Text(
+            value,
+            style = if (value.length > 5) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
+            color = TextHi,
+            maxLines = 1,
+            softWrap = false,
+            textAlign = TextAlign.Center,
+        )
+        Text(label, style = MaterialTheme.typography.bodySmall, color = TextLo, maxLines = 1, textAlign = TextAlign.Center)
     }
 }
 

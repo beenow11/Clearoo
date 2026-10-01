@@ -35,12 +35,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.clearoo.app.domain.Deck
 import com.clearoo.app.domain.MoodRules
 import com.clearoo.app.domain.Lines
 import com.clearoo.app.domain.StreakRules
 import com.clearoo.app.mascot.Mascot
 import com.clearoo.app.ui.ClearooViewModel
+import com.clearoo.app.data.GallerySummary
 import com.clearoo.app.ui.components.GradientButton
+import com.clearoo.app.ui.components.Pill
+import com.clearoo.app.ui.components.pressable
 import com.clearoo.app.ui.components.ProgressRing
 import com.clearoo.app.ui.components.SpeechBubble
 import com.clearoo.app.ui.components.StatTile
@@ -52,6 +56,8 @@ import com.clearoo.app.ui.theme.Surface1
 import com.clearoo.app.ui.theme.Surface2
 import com.clearoo.app.ui.theme.TextHi
 import com.clearoo.app.ui.theme.TextLo
+import com.clearoo.app.ui.theme.Violet
+import androidx.compose.ui.graphics.graphicsLayer
 import com.clearoo.app.util.Fmt
 import com.clearoo.app.util.Perms
 import java.time.LocalDate
@@ -60,7 +66,7 @@ import java.util.Locale
 import java.time.format.TextStyle as DayStyle
 
 @Composable
-fun HomeScreen(vm: ClearooViewModel, onStart: () -> Unit, onSettings: () -> Unit) {
+fun HomeScreen(vm: ClearooViewModel, onStart: (Deck) -> Unit, onSettings: () -> Unit) {
     val context = LocalContext.current
     val progress by vm.progress.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -132,11 +138,14 @@ fun HomeScreen(vm: ClearooViewModel, onStart: () -> Unit, onSettings: () -> Unit
         }
 
         Spacer(Modifier.height(18.dp))
-        GradientButton(if (deleted >= goal) "Keep swiping 🔥" else "Start swiping", onStart)
-        Spacer(Modifier.height(18.dp))
+        GradientButton(if (deleted >= goal) "Keep swiping 🔥" else "Start swiping", { onStart(Deck.RANDOM) })
+        Spacer(Modifier.height(24.dp))
+        SmartDecks(vm.deckSummaries, onStart)
+        Spacer(Modifier.height(24.dp))
 
+        val (freed, unit) = Fmt.bytesParts(progress.totalFreed)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatTile("💾", Fmt.bytes(progress.totalFreed), "freed", Modifier.weight(1f))
+            StatTile("💾", freed, "$unit freed", Modifier.weight(1f))
             StatTile("🗑️", "${progress.totalDeleted}", "deleted", Modifier.weight(1f))
             StatTile("🏆", "${progress.bestStreak}", "best streak", Modifier.weight(1f))
         }
@@ -195,5 +204,65 @@ private fun WeekStrip(goalDays: Set<Long>, today: Long) {
                 }
             }
         }
+    }
+}
+
+/** Two-column grid of smart decks. Roo recommends the one that frees the most space. */
+@Composable
+private fun SmartDecks(summaries: Map<Deck, GallerySummary>, onStart: (Deck) -> Unit) {
+    val decks = Deck.entries.filter { it != Deck.RANDOM }
+    val rooPick = summaries
+        .filterKeys { it != Deck.RANDOM && it != Deck.BIGGEST }
+        .filterValues { it.count > 0 }
+        .maxByOrNull { it.value.bytes }?.key
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Smart decks", style = MaterialTheme.typography.titleLarge, color = TextHi)
+        decks.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { deck ->
+                    DeckTile(deck, summaries[deck], summaries.isNotEmpty(), deck == rooPick, Modifier.weight(1f)) {
+                        onStart(deck)
+                    }
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeckTile(
+    deck: Deck,
+    summary: GallerySummary?,
+    loaded: Boolean,
+    recommended: Boolean,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
+    val empty = summary != null && summary.count == 0
+    val subtitle = when {
+        deck == Deck.BLURRY -> "Roo scans for you"
+        !loaded -> "…"
+        summary == null || empty -> "All clear 🎉"
+        else -> "${String.format(Locale.getDefault(), "%,d", summary.count)} · ${Fmt.bytes(summary.bytes)}"
+    }
+    Column(
+        modifier
+            .pressable(enabled = !empty, onClick = onClick)
+            .graphicsLayer { alpha = if (empty) 0.5f else 1f }
+            .clip(RoundedCornerShape(22.dp))
+            .background(Surface1)
+            .then(if (recommended) Modifier.border(2.dp, Violet, RoundedCornerShape(22.dp)) else Modifier)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(deck.emoji, style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.weight(1f))
+            if (recommended) Pill("Roo's pick", Violet)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(deck.title, style = MaterialTheme.typography.titleMedium, color = TextHi, maxLines = 1)
+        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = TextLo, maxLines = 1)
     }
 }

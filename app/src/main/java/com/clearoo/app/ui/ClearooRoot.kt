@@ -61,7 +61,10 @@ fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> U
             Screen.Onboarding -> OnboardingScreen(vm, onDone = { screen = Screen.Home })
             Screen.Home -> HomeScreen(
                 vm,
-                onStart = { screen = Screen.Swipe },
+                onStart = { deck ->
+                    vm.startDeck(deck)
+                    screen = Screen.Swipe
+                },
                 onSettings = { screen = Screen.Settings },
             )
             Screen.Swipe -> SwipeScreen(

@@ -53,15 +53,18 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.clearoo.app.domain.Deck
 import com.clearoo.app.domain.Mood
 import com.clearoo.app.domain.MoodRules
 import com.clearoo.app.domain.StreakRules
 import com.clearoo.app.mascot.Mascot
 import com.clearoo.app.ui.ClearooViewModel
+import com.clearoo.app.ui.components.GhostButton
 import com.clearoo.app.ui.components.GradientButton
 import com.clearoo.app.ui.components.Pill
 import com.clearoo.app.ui.components.RoundAction
@@ -162,9 +165,7 @@ fun SwipeScreen(vm: ClearooViewModel, onBack: () -> Unit, onOpenBin: () -> Unit)
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextHi)
             }
-            Spacer(Modifier.weight(1f))
-            GoalBar(count, goal, Modifier.weight(2f))
-            Spacer(Modifier.weight(1f))
+            GoalBar(vm.activeDeck, count, goal, Modifier.weight(1f).padding(horizontal = 12.dp))
             BinButton(vm.pending.size, onOpenBin)
         }
 
@@ -199,8 +200,13 @@ fun SwipeScreen(vm: ClearooViewModel, onBack: () -> Unit, onOpenBin: () -> Unit)
         ) {
             when {
                 !hasAccess -> NoAccess { permissionLauncher.launch(Perms.media) }
-                top == null && vm.deckLoading -> DeckMessage(Mood.HOPEFUL, "Finding photos for you…")
-                top == null -> DeckMessage(Mood.PROUD, "All caught up! 🎉\nYou've reviewed everything for now.")
+                top == null && vm.deckLoading -> DeckMessage(
+                    Mood.HOPEFUL,
+                    if (vm.activeDeck == Deck.BLURRY) "Squinting at your photos… 🔍" else "Finding photos for you…",
+                )
+                top == null -> DeckMessage(Mood.PROUD, doneLine(vm.activeDeck)) {
+                    GhostButton("Pick another deck", onBack)
+                }
                 else -> {
                     val visible = vm.deck.take(3)
                     for (i in visible.indices.reversed()) {
@@ -257,14 +263,20 @@ fun SwipeScreen(vm: ClearooViewModel, onBack: () -> Unit, onOpenBin: () -> Unit)
 }
 
 @Composable
-private fun GoalBar(count: Int, goal: Int, modifier: Modifier = Modifier) {
+private fun GoalBar(deck: Deck, count: Int, goal: Int, modifier: Modifier = Modifier) {
     val fraction by animateFloatAsState(
         (count.toFloat() / goal).coerceIn(0f, 1f),
         spring(dampingRatio = 0.7f, stiffness = 200f),
         label = "goal",
     )
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("$count / $goal today", style = MaterialTheme.typography.labelMedium, color = TextLo)
+        Text(
+            "${deck.emoji} ${deck.title} · $count/$goal",
+            style = MaterialTheme.typography.labelMedium,
+            color = TextLo,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         Spacer(Modifier.height(4.dp))
         Box(
             Modifier
@@ -322,12 +334,20 @@ private fun SpeechBubbleLeft(text: String) {
 }
 
 @Composable
-private fun DeckMessage(mood: Mood, text: String) {
+private fun DeckMessage(mood: Mood, text: String, action: @Composable () -> Unit = {}) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Mascot(mood, size = 160.dp)
         Spacer(Modifier.height(16.dp))
         Text(text, style = MaterialTheme.typography.titleLarge, color = TextHi, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(20.dp))
+        action()
     }
+}
+
+private fun doneLine(deck: Deck): String = when (deck) {
+    Deck.RANDOM, Deck.BIGGEST -> "All caught up! 🎉\nYou've reviewed everything for now."
+    Deck.BLURRY -> "No blurry shots found 🔍\nYour photos look sharp!"
+    else -> "No more ${deck.title.lowercase()}! 🎉\nTry another deck."
 }
 
 @Composable
