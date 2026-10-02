@@ -50,24 +50,15 @@ read -r W H < <(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1 | tr x ' '
 # 450ms drags: the software emulator drops most touch points of very fast flicks (a real
 # touchscreen doesn't), so a quicker gesture would test the emulator, not the app.
 swipe() {
-  adb logcat -c
   # Start from the opposite edge: the emulator drops the tail end of a drag, so the
   # app should still see well over the swipe threshold.
   if [ "$1" -lt $((W / 2)) ]; then from=$((W * 9 / 10)); else from=$((W / 10)); fi
   adb shell input swipe "$from" $((H / 2)) "$1" $((H / 2)) 450
   sleep 1.5
-  adb logcat -d -s ClearooSwipe:D | grep ClearooSwipe || echo "  (no drag seen)"
 }
 $UI tap "Start swiping"
 $UI expect "Quick mix"
 $UI shot 03-deck
-echo "-- diagnostics: card positions before and after one keep-flick"
-$UI cards
-adb shell input swipe $((W / 2)) $((H / 2)) $((W * 9 / 10)) $((H / 2)) 180
-sleep 2
-$UI cards
-adb logcat -d -s ClearooSwipe:D | tail -20 || true
-# The bin count is checked after every swipe.
 # An overloaded emulator occasionally drops most of a drag's touch points; one retry covers
 # that, and a real bug still fails both attempts. Keeps are checked via the top card changing.
 top_card() { python3 scripts/ui.py cards | tail -1; }

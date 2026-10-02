@@ -40,7 +40,7 @@ Never commit the keystore to the repo.
 
 ## 3. Build the app bundle
 
-1. Bump `versionCode` (and `versionName`) in `app/build.gradle.kts`. Every upload needs a higher `versionCode` than the last one.
+1. Optionally bump `versionName` (the version users see, e.g. 1.0.1) in `app/build.gradle.kts`. The `versionCode` that Play checks is set automatically from the workflow's run number, so it always goes up.
 2. In GitHub, open **Actions → Play Store release → Run workflow**. Alternatively, push a tag like `v1.0.0`.
 3. When it's done, download the **clearoo-release** artifact. It contains:
    - `app-release.aab`: upload this to Play.
@@ -87,6 +87,13 @@ Go to **Production → Create release**, upload, and roll out. A first review us
 
 ## Shipping updates later
 
-1. Bump `versionCode`.
+1. Optionally bump `versionName`.
 2. Run the release workflow.
-3. Upload the new `.aab` to the track you want.
+3. Upload the new `.aab` to the track you want. Use a staged rollout (e.g. 20%) for production updates and watch Android vitals before going to 100%.
+
+## Keeping user data safe across updates
+
+- **Same package name and the same Play signing key:** every update installs in place, so streak, stats, settings, kept photos and the bin are all kept.
+- **Stats, streak and settings are also backed up by Android,** so they come back after a reinstall or on a new phone. Kept-photo and bin IDs stay on the device on purpose, because they only make sense on the phone that recorded them.
+- **Never rename or reuse a stored key** in `PrefsRepository.kt`. Add new ones instead.
+- **Every push runs the emulator smoke test,** which installs the release build, uses it, re-installs it as an update and checks the stats are still there. Don't ship if it's red.
