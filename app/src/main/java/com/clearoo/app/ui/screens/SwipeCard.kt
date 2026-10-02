@@ -75,9 +75,9 @@ class CardSwipeState(initialX: Float = 0f) {
     fun progress(width: Float): Float =
         if (width <= 0f) 0f else (offsetX.value / (width * SWIPE_THRESHOLD)).coerceIn(-1f, 1f)
 
-    suspend fun dragBy(dx: Float, dy: Float) {
-        offsetX.snapTo(offsetX.value + dx)
-        offsetY.snapTo(offsetY.value + dy)
+    suspend fun dragTo(x: Float, y: Float) {
+        offsetX.snapTo(x)
+        offsetY.snapTo(y)
     }
 
     suspend fun settle() = coroutineScope {
@@ -104,26 +104,36 @@ fun Modifier.swipeGestures(
     val tracker = VelocityTracker()
     val flingVelocity = 900.dp.toPx()
     var pastThreshold = false
+    // The finger position is tracked here, synchronously. The card's Animatable is only
+    // updated from launched coroutines, so on a quick flick it can lag behind the finger
+    // and must not be used to decide whether the swipe counts.
+    var dragX = 0f
+    var dragY = 0f
     detectDragGestures(
         onDragStart = {
             tracker.resetTracking()
             pastThreshold = false
+            dragX = state.offsetX.value
+            dragY = state.offsetY.value
         },
         onDrag = { change, amount ->
             change.consume()
             tracker.addPosition(change.uptimeMillis, change.position)
-            val x = state.offsetX.value + amount.x
-            val past = abs(x) > width * SWIPE_THRESHOLD
+            dragX += amount.x
+            dragY += amount.y
+            val past = abs(dragX) > width * SWIPE_THRESHOLD
             if (past && !pastThreshold) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
             pastThreshold = past
-            scope.launch { state.dragBy(amount.x, amount.y) }
+            val x = dragX
+            val y = dragY
+            scope.launch { state.dragTo(x, y) }
         },
         onDragEnd = {
             val vx = tracker.calculateVelocity().x
-            val x = state.offsetX.value
             val keep = when {
-                abs(x) > width * SWIPE_THRESHOLD -> x > 0
-                abs(vx) > flingVelocity && vx * x > 0 -> vx > 0
+                abs(dragX) > width * SWIPE_THRESHOLD -> dragX > 0
+                // A fast flick counts even if it was short, as long as it didn't reverse.
+                abs(vx) > flingVelocity && vx * dragX >= 0 -> vx > 0
                 else -> null
             }
             scope.launch {

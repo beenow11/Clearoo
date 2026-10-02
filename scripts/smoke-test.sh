@@ -45,12 +45,12 @@ swipe() { adb shell input swipe $((W / 2)) $((H / 2)) "$1" $((H / 2)) 180; sleep
 $UI tap "Start swiping"
 $UI expect "Quick mix"
 $UI shot 03-deck
-swipe $((W / 10))        # delete
-swipe $((W / 10))        # delete
-swipe $((W * 9 / 10))    # keep
-swipe $((W / 10))        # delete
-swipe $((W * 9 / 10))    # keep
-$UI expect "🗑️ 3"
+# Quick flicks, like a real thumb; the bin count is checked after every one.
+swipe $((W / 10));     $UI expect "🗑️ 1"   # delete
+swipe $((W / 10));     $UI expect "🗑️ 2"   # delete
+swipe $((W * 9 / 10)); $UI expect "🗑️ 2"   # keep
+swipe $((W / 10));     $UI expect "🗑️ 3"   # delete
+swipe $((W * 9 / 10)); $UI expect "🗑️ 3"   # keep
 $UI shot 04-after-swipes
 
 echo "== The bin survives the app being killed"
