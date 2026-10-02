@@ -2,6 +2,7 @@
 """Tiny adb + uiautomator driver for the smoke test.
 
   ui.py tap TEXT       tap the first element whose text/description contains TEXT
+  ui.py tapx TEXT      tap the element whose text is exactly TEXT (e.g. a dialog button)
   ui.py expect TEXT    wait until TEXT is on screen
   ui.py shot NAME      save a screenshot and print the visible text
 """
@@ -43,12 +44,13 @@ def visible_text(ns):
     return [label(n).strip() for n in ns if label(n).strip()]
 
 
-def find(text, timeout=20):
+def find(text, timeout=20, exact=False):
     end = time.time() + timeout
     while time.time() < end:
         ns = nodes()
         for n in ns:
-            if norm(text) in label(n):
+            hit = label(n).strip() == norm(text) if exact else norm(text) in label(n)
+            if hit:
                 return n, ns
         time.sleep(1)
     return None, nodes()
@@ -86,10 +88,10 @@ if __name__ == "__main__":
     elif cmd == "cards":
         cards()
     else:
-        n, ns = find(arg)
+        n, ns = find(arg, exact=(cmd == "tapx"))
         if n is None:
             fail(f"'{arg}' not found", ns)
-        if cmd == "tap":
+        if cmd in ("tap", "tapx"):
             x, y = center(n)
             adb("shell", "input", "tap", str(x), str(y))
             time.sleep(1.2)

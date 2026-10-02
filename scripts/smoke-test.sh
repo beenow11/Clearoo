@@ -83,7 +83,7 @@ $UI tap "🗑️ 3"
 $UI expect "Move 3 to trash"
 $UI shot 05-bin
 $UI tap "Move 3 to trash"
-$UI tap "Allow"                  # Android's own confirmation dialog
+$UI tapx "Allow"                 # Android's own confirmation dialog
 $UI expect "freed"
 $UI shot 06-celebration
 $UI tap "Done for today"
