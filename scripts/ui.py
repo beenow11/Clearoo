@@ -69,7 +69,7 @@ def find(text, timeout=None, exact=False):
             end += 5
             continue
         for n in ns:
-            hit = label(n).strip() == norm(text) if exact else norm(text) in label(n)
+            hit = label(n).strip().lower() == norm(text).lower() if exact else norm(text) in label(n)
             if hit:
                 return n, ns
         time.sleep(1)
