@@ -15,9 +15,15 @@ for i in 1 2 3; do
   ffmpeg -loglevel error -y -f lavfi -i "smptebars=size=720x1280:rate=1" -frames:v 1 "media/Screenshot_2024010${i}.png"
 done
 ffmpeg -loglevel error -y -f lavfi -i "testsrc2=size=720x1280:rate=30" -t 3 -pix_fmt yuv420p "media/VID_1.mp4"
+# Shared storage mounts a little after boot completes; wait for it and retry the copy.
+for _ in $(seq 1 30); do adb shell touch /sdcard/.ready 2>/dev/null && break; sleep 2; done
+push() {
+  for attempt in 1 2 3; do adb push "$@" >/dev/null && return 0; sleep 5; done
+  return 1
+}
 adb shell mkdir -p /sdcard/DCIM/Camera /sdcard/Pictures/Screenshots
-adb push media/IMG_*.jpg media/VID_1.mp4 /sdcard/DCIM/Camera/ >/dev/null
-adb push media/Screenshot_*.png /sdcard/Pictures/Screenshots/ >/dev/null
+push media/IMG_*.jpg media/VID_1.mp4 /sdcard/DCIM/Camera/
+push media/Screenshot_*.png /sdcard/Pictures/Screenshots/
 adb shell content call --uri content://media --method scan_volume --arg external_primary >/dev/null || true
 sleep 3
 echo "MediaStore images: $(adb shell content query --uri content://media/external/images/media --projection _id | grep -c Row || true)"
