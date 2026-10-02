@@ -44,10 +44,28 @@ def visible_text(ns):
     return [label(n).strip() for n in ns if label(n).strip()]
 
 
+def dismiss_system_anr(ns):
+    """The slow emulator's own apps (launcher, System UI) sometimes freeze and show an
+    "isn't responding" dialog over everything. Wait it out; Clearoo's own ANRs still fail."""
+    texts = visible_text(ns)
+    if any("isn't responding" in t and "Clearoo" not in t for t in texts):
+        for n in ns:
+            if label(n).strip() == "Wait":
+                x, y = center(n)
+                adb("shell", "input", "tap", str(x), str(y))
+                print(f"(dismissed system dialog: {texts[0]})")
+                time.sleep(2)
+                return True
+    return False
+
+
 def find(text, timeout=20, exact=False):
     end = time.time() + timeout
     while time.time() < end:
         ns = nodes()
+        if dismiss_system_anr(ns):
+            end += 5
+            continue
         for n in ns:
             hit = label(n).strip() == norm(text) if exact else norm(text) in label(n)
             if hit:
