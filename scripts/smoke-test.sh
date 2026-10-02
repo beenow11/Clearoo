@@ -45,6 +45,12 @@ swipe() { adb shell input swipe $((W / 2)) $((H / 2)) "$1" $((H / 2)) 180; sleep
 $UI tap "Start swiping"
 $UI expect "Quick mix"
 $UI shot 03-deck
+echo "-- diagnostics: card positions before and after one keep-flick"
+$UI cards
+adb shell input swipe $((W / 2)) $((H / 2)) $((W * 9 / 10)) $((H / 2)) 180
+sleep 2
+$UI cards
+adb logcat -d -s ClearooSwipe:D | tail -20 || true
 # Quick flicks, like a real thumb; the bin count is checked after every one.
 swipe $((W / 10));     $UI expect "🗑️ 1"   # delete
 swipe $((W / 10));     $UI expect "🗑️ 2"   # delete

@@ -1,6 +1,7 @@
 package com.clearoo.app.ui.screens
 
 import android.graphics.Matrix
+import android.util.Log
 import android.view.TextureView
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutLinearInEasing
@@ -111,6 +112,7 @@ fun Modifier.swipeGestures(
     var dragY = 0f
     detectDragGestures(
         onDragStart = {
+            Log.d("ClearooSwipe", "start")
             tracker.resetTracking()
             pastThreshold = false
             dragX = state.offsetX.value
@@ -136,17 +138,22 @@ fun Modifier.swipeGestures(
                 abs(vx) > flingVelocity && vx * dragX >= 0 -> vx > 0
                 else -> null
             }
+            Log.d("ClearooSwipe", "end dragX=$dragX vx=$vx width=$width keep=$keep")
             scope.launch {
                 if (keep == null) {
                     state.settle()
                 } else {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     state.flyOut(keep, width)
+                    Log.d("ClearooSwipe", "flew out, keep=$keep")
                     onSwiped(keep)
                 }
             }
         },
-        onDragCancel = { scope.launch { state.settle() } },
+        onDragCancel = {
+            Log.d("ClearooSwipe", "cancel")
+            scope.launch { state.settle() }
+        },
     )
 }
 

@@ -71,10 +71,20 @@ def shot(name):
     print(f"[{name}] {visible_text(nodes())}")
 
 
+def cards():
+    """Where each media card is on screen (the last one listed is the top card)."""
+    for n in nodes():
+        d = n.get("content-desc") or ""
+        if d.lower().endswith((".jpg", ".png", ".mp4")):
+            print(f"  card {d} bounds={n.get('bounds')}")
+
+
 if __name__ == "__main__":
-    cmd, arg = sys.argv[1], sys.argv[2]
+    cmd, arg = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""
     if cmd == "shot":
         shot(arg)
+    elif cmd == "cards":
+        cards()
     else:
         n, ns = find(arg)
         if n is None:
