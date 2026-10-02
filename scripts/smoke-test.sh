@@ -41,7 +41,14 @@ $UI shot 02-home
 
 echo "== Swipe"
 read -r W H < <(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1 | tr x ' ')
-swipe() { adb shell input swipe $((W / 2)) $((H / 2)) "$1" $((H / 2)) 180; sleep 1.2; }
+# 450ms drags: the software emulator drops most touch points of very fast flicks (a real
+# touchscreen doesn't), so a quicker gesture would test the emulator, not the app.
+swipe() {
+  adb logcat -c
+  adb shell input swipe $((W / 2)) $((H / 2)) "$1" $((H / 2)) 450
+  sleep 1.5
+  adb logcat -d -s ClearooSwipe:D | grep ClearooSwipe || echo "  (no drag seen)"
+}
 $UI tap "Start swiping"
 $UI expect "Quick mix"
 $UI shot 03-deck
@@ -51,7 +58,7 @@ adb shell input swipe $((W / 2)) $((H / 2)) $((W * 9 / 10)) $((H / 2)) 180
 sleep 2
 $UI cards
 adb logcat -d -s ClearooSwipe:D | tail -20 || true
-# Quick flicks, like a real thumb; the bin count is checked after every one.
+# The bin count is checked after every swipe.
 swipe $((W / 10));     $UI expect "🗑️ 1"   # delete
 swipe $((W / 10));     $UI expect "🗑️ 2"   # delete
 swipe $((W * 9 / 10)); $UI expect "🗑️ 2"   # keep
