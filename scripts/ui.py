@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""Tiny adb + uiautomator driver for the smoke test.
+
+  ui.py tap TEXT       tap the first element whose text/description contains TEXT
+  ui.py expect TEXT    wait until TEXT is on screen
+  ui.py shot NAME      save a screenshot and print the visible text
+"""
+import re
+import subprocess
+import sys
+import time
+import xml.etree.ElementTree as ET
+
+OUT = "smoke"
+
+
+def adb(*args, check=True):
+    return subprocess.run(["adb", *args], check=check, capture_output=True).stdout
+
+
+def nodes():
+    for _ in range(3):
+        adb("shell", "rm", "-f", "/sdcard/ui.xml", check=False)
+        adb("shell", "uiautomator", "dump", "/sdcard/ui.xml", check=False)
+        raw = adb("shell", "cat", "/sdcard/ui.xml", check=False)
+        try:
+            return list(ET.fromstring(raw).iter("node"))
+        except ET.ParseError:
+            time.sleep(1)
+    return []
+
+
+def norm(s):
+    # Emoji variation selectors differ between sources; ignore them when matching.
+    return s.replace("\ufe0f", "")
+
+
+def label(n):
+    return norm((n.get("text") or "") + " " + (n.get("content-desc") or ""))
+
+
+def visible_text(ns):
+    return [label(n).strip() for n in ns if label(n).strip()]
+
+
+def find(text, timeout=20):
+    end = time.time() + timeout
+    while time.time() < end:
+        ns = nodes()
+        for n in ns:
+            if norm(text) in label(n):
+                return n, ns
+        time.sleep(1)
+    return None, nodes()
+
+
+def center(n):
+    x1, y1, x2, y2 = map(int, re.findall(r"\d+", n.get("bounds")))
+    return (x1 + x2) // 2, (y1 + y2) // 2
+
+
+def fail(msg, ns):
+    print(f"FAIL: {msg}\nOn screen: {visible_text(ns)}")
+    shot("failure")
+    sys.exit(1)
+
+
+def shot(name):
+    with open(f"{OUT}/{name}.png", "wb") as f:
+        f.write(adb("exec-out", "screencap", "-p"))
+    print(f"[{name}] {visible_text(nodes())}")
+
+
+if __name__ == "__main__":
+    cmd, arg = sys.argv[1], sys.argv[2]
+    if cmd == "shot":
+        shot(arg)
+    else:
+        n, ns = find(arg)
+        if n is None:
+            fail(f"'{arg}' not found", ns)
+        if cmd == "tap":
+            x, y = center(n)
+            adb("shell", "input", "tap", str(x), str(y))
+            time.sleep(1.2)
+        print(f"ok: {cmd} '{arg}'")

@@ -22,6 +22,7 @@ import com.clearoo.app.domain.OutfitRules
 import com.clearoo.app.domain.Progress
 import com.clearoo.app.domain.StreakRules
 import com.clearoo.app.notify.Notifications
+import com.clearoo.app.util.Perms
 import com.clearoo.app.notify.ReminderScheduler
 import com.clearoo.app.widget.RooWidget
 import kotlinx.coroutines.Job
@@ -87,12 +88,46 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
     private val swiped = HashSet<Long>()
     private var swipeCount = 0L
     private var loadJob: Job? = null
+    private var binRestored = false
     /** Bumped on every deck switch so a slow load for the old deck is dropped. */
     private var generation = 0
 
     private fun today() = LocalDate.now().toEpochDay()
 
+    init {
+        restoreBin()
+    }
+
+    /** Brings back the bin from the last session; retried once media permission exists. */
+    private fun restoreBin() {
+        if (binRestored) return
+        viewModelScope.launch {
+            val ids = prefs.binIds.first()
+            if (ids.isEmpty()) {
+                binRestored = true
+                return@launch
+            }
+            // Without media permission nothing can be looked up yet; try again later.
+            if (!Perms.hasMedia(getApplication())) return@launch
+            val items = runCatching { media.itemsByIds(ids) }.getOrNull() ?: return@launch
+            binRestored = true
+            val known = pending.map { it.id }.toSet()
+            pending.addAll(items.filter { it.id !in known })
+            saveBin()
+        }
+    }
+
+    private fun saveBin() {
+        val ids = pending.map { it.id }.toSet()
+        viewModelScope.launch {
+            // Until the old bin is restored, keep its ids rather than overwrite them.
+            prefs.setBin(if (binRestored) ids else ids + prefs.binIds.first())
+        }
+    }
+
     fun refreshGallery() {
+        media.invalidate()
+        restoreBin()
         viewModelScope.launch {
             gallery = runCatching { media.summary() }.getOrNull()
             deckSummaries = runCatching { media.deckSummaries(System.currentTimeMillis()) }.getOrDefault(emptyMap())
@@ -100,6 +135,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun ensureDeck() {
+        restoreBin()
         if (deck.isEmpty()) loadMore()
     }
 
@@ -150,6 +186,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
             reaction = Reaction(Mood.LOVE, Lines.keepReaction(swipeCount), swipeCount)
         } else {
             pending.add(item)
+            saveBin()
             reaction = Reaction(Mood.EXCITED, Lines.deleteReaction(swipeCount), swipeCount)
         }
         if (deck.size < PREFETCH_AT) loadMore()
@@ -166,6 +203,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
             }
         } else {
             pending.removeAll { it.id == record.item.id }
+            saveBin()
         }
         deck.add(0, record.item)
         lastUndone = record
@@ -175,6 +213,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
     /** Un-marks an item from the bin; it counts as kept. */
     fun restore(item: MediaItem) {
         pending.removeAll { it.id == item.id }
+        saveBin()
         history.removeAll { it.item.id == item.id }
         canUndo = history.isNotEmpty()
         viewModelScope.launch {
@@ -194,6 +233,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         val items = pending.toList()
         if (items.isEmpty()) return
         pending.clear()
+        saveBin()
         history.clear()
         canUndo = false
         lastResult = null

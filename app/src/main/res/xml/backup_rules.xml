@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11: back up stats, streak and settings only. The device store (kept photo ids,
+     bin) is left out because MediaStore ids mean nothing on another phone. -->
+<full-backup-content>
+    <include domain="file" path="datastore/clearoo.preferences_pb" />
+</full-backup-content>

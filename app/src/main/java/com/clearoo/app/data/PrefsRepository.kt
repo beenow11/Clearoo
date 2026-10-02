@@ -2,10 +2,12 @@ package com.clearoo.app.data
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -16,10 +18,31 @@ import com.clearoo.app.domain.Outfit
 import com.clearoo.app.domain.Progress
 import com.clearoo.app.domain.StreakRules
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
-private val Context.clearooStore: DataStore<Preferences> by preferencesDataStore(name = "clearoo")
+/*
+ * Two stores, split by what survives a move to a new phone:
+ * - "clearoo": stats, streak and settings. Backed up by Android (see res/xml/backup_rules.xml),
+ *   so they come back after a reinstall or on a new phone.
+ * - "clearoo_device": MediaStore ids (kept photos, the bin). Those ids only mean something on
+ *   this phone, so they are never backed up; restored elsewhere they would hide the wrong photos.
+ *
+ * Keys are a contract with every installed copy of the app: never rename or reuse one.
+ * Add new keys instead, and bump SCHEMA_VERSION if old data ever needs converting.
+ */
+private val Context.clearooStore: DataStore<Preferences> by preferencesDataStore(
+    name = "clearoo",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+)
+private val Context.deviceStore: DataStore<Preferences> by preferencesDataStore(
+    name = "clearoo_device",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+)
+
+/** A read error (not corruption) should show defaults, not crash. */
+private fun DataStore<Preferences>.safeData(): Flow<Preferences> = data.catch { emit(emptyPreferences()) }
 
 data class AppSettings(
     val reminderHour: Int = 19,
@@ -32,6 +55,7 @@ data class AppSettings(
 
 class PrefsRepository(context: Context) {
     private val store = context.applicationContext.clearooStore
+    private val device = context.applicationContext.deviceStore
 
     private object Keys {
         val STREAK = intPreferencesKey("streak")
@@ -45,7 +69,7 @@ class PrefsRepository(context: Context) {
         val TOTAL_FREED = longPreferencesKey("total_freed")
         val TOTAL_REVIEWED = intPreferencesKey("total_reviewed")
         val GOAL_DAYS = stringSetPreferencesKey("goal_days")
-        val KEPT_IDS = stringSetPreferencesKey("kept_ids")
+        val SCHEMA_VERSION = intPreferencesKey("schema_version")
         val REMINDER_HOUR = intPreferencesKey("reminder_hour")
         val REMINDER_MINUTE = intPreferencesKey("reminder_minute")
         val DAILY_GOAL = intPreferencesKey("daily_goal")
@@ -54,9 +78,15 @@ class PrefsRepository(context: Context) {
         val OUTFIT = stringPreferencesKey("outfit")
     }
 
-    val progress: Flow<Progress> = store.data.map { it.toProgress() }.distinctUntilChanged()
+    /** Keys in the device-only store. */
+    private object DeviceKeys {
+        val KEPT_IDS = stringSetPreferencesKey("kept_ids")
+        val BIN_IDS = stringSetPreferencesKey("bin_ids")
+    }
 
-    val settings: Flow<AppSettings> = store.data.map { p ->
+    val progress: Flow<Progress> = store.safeData().map { it.toProgress() }.distinctUntilChanged()
+
+    val settings: Flow<AppSettings> = store.safeData().map { p ->
         val defaults = AppSettings()
         AppSettings(
             reminderHour = p[Keys.REMINDER_HOUR] ?: defaults.reminderHour,
@@ -68,8 +98,13 @@ class PrefsRepository(context: Context) {
         )
     }.distinctUntilChanged()
 
-    val keptIds: Flow<Set<Long>> = store.data.map { p ->
-        p[Keys.KEPT_IDS].orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
+    val keptIds: Flow<Set<Long>> = device.safeData().map { p -> p[DeviceKeys.KEPT_IDS].toIds() }
+
+    /** Items waiting in the bin, so a swipe session survives the app being closed. */
+    val binIds: Flow<Set<Long>> = device.safeData().map { p -> p[DeviceKeys.BIN_IDS].toIds() }
+
+    suspend fun setBin(ids: Collection<Long>) {
+        device.edit { p -> p[DeviceKeys.BIN_IDS] = ids.map { it.toString() }.toSet() }
     }
 
     /** Returns (before, after) so callers can tell whether the streak just grew. */
@@ -89,16 +124,18 @@ class PrefsRepository(context: Context) {
     }
 
     suspend fun addKept(id: Long) {
-        store.edit { p -> p[Keys.KEPT_IDS] = p[Keys.KEPT_IDS].orEmpty() + id.toString() }
+        device.edit { p -> p[DeviceKeys.KEPT_IDS] = p[DeviceKeys.KEPT_IDS].orEmpty() + id.toString() }
     }
 
     suspend fun removeKept(id: Long) {
-        store.edit { p -> p[Keys.KEPT_IDS] = p[Keys.KEPT_IDS].orEmpty() - id.toString() }
+        device.edit { p -> p[DeviceKeys.KEPT_IDS] = p[DeviceKeys.KEPT_IDS].orEmpty() - id.toString() }
     }
 
     suspend fun clearKept() {
-        store.edit { p -> p.remove(Keys.KEPT_IDS) }
+        device.edit { p -> p.remove(DeviceKeys.KEPT_IDS) }
     }
+
+    private fun Set<String>?.toIds(): Set<Long> = orEmpty().mapNotNull { it.toLongOrNull() }.toSet()
 
     suspend fun setReminder(hour: Int, minute: Int) {
         store.edit { p ->
@@ -138,6 +175,7 @@ class PrefsRepository(context: Context) {
     )
 
     private fun MutablePreferences.write(p: Progress) {
+        this[Keys.SCHEMA_VERSION] = SCHEMA_VERSION
         this[Keys.STREAK] = p.streak
         this[Keys.BEST_STREAK] = p.bestStreak
         this[Keys.LAST_GOAL_DAY] = p.lastGoalDay
@@ -151,3 +189,6 @@ class PrefsRepository(context: Context) {
         this[Keys.GOAL_DAYS] = p.goalDays.map { it.toString() }.toSet()
     }
 }
+
+/** Version of the stored data layout; bump it alongside a migration when old data must be converted. */
+private const val SCHEMA_VERSION = 1

@@ -51,6 +51,9 @@ class MediaRepository(context: Context) {
         cache = null
     }
 
+    /** Items still in the gallery, for restoring a saved bin. */
+    suspend fun itemsByIds(ids: Set<Long>): List<MediaItem> = all().filter { it.id in ids }
+
     suspend fun summary(): GallerySummary {
         val all = all()
         return GallerySummary(all.size, all.sumOf { it.sizeBytes })

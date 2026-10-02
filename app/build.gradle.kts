@@ -14,7 +14,9 @@ android {
         minSdk = 30
         // Google Play requires targeting a recent Android version for new apps and updates.
         targetSdk = 36
-        versionCode = 4
+        // Play rejects an upload whose versionCode isn't higher than the last one. The release
+        // workflow sets VERSION_CODE from its run number, so it always goes up on its own.
+        versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 4
         versionName = "1.0.0"
     }
 
@@ -47,6 +49,13 @@ android {
             isShrinkResources = true
             signingConfig = signingConfigs.findByName("upload")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        // Exactly the release build (R8, shrunk resources) but debug-signed, so CI can install
+        // and test it on an emulator without the upload key.
+        create("qa") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
         }
     }
 
