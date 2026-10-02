@@ -51,7 +51,10 @@ read -r W H < <(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1 | tr x ' '
 # touchscreen doesn't), so a quicker gesture would test the emulator, not the app.
 swipe() {
   adb logcat -c
-  adb shell input swipe $((W / 2)) $((H / 2)) "$1" $((H / 2)) 450
+  # Start from the opposite edge: the emulator drops the tail end of a drag, so the
+  # app should still see well over the swipe threshold.
+  if [ "$1" -lt $((W / 2)) ]; then from=$((W * 9 / 10)); else from=$((W / 10)); fi
+  adb shell input swipe "$from" $((H / 2)) "$1" $((H / 2)) 450
   sleep 1.5
   adb logcat -d -s ClearooSwipe:D | grep ClearooSwipe || echo "  (no drag seen)"
 }
@@ -69,13 +72,13 @@ adb logcat -d -s ClearooSwipe:D | tail -20 || true
 # that, and a real bug still fails both attempts. Keeps are checked via the top card changing.
 top_card() { python3 scripts/ui.py cards | tail -1; }
 delete_swipe() {  # $1 = expected bin count afterwards
-  swipe $((W / 10))
-  UI_TIMEOUT=6 $UI expect "🗑️ $1" || { echo "  retrying swipe"; swipe $((W / 10)); $UI expect "🗑️ $1"; }
+  swipe $((W / 20))
+  UI_TIMEOUT=6 $UI expect "🗑️ $1" || { echo "  retrying swipe"; swipe $((W / 20)); $UI expect "🗑️ $1"; }
 }
 keep_swipe() {
   before=$(top_card)
-  swipe $((W * 9 / 10))
-  if [ "$(top_card)" = "$before" ]; then echo "  retrying swipe"; swipe $((W * 9 / 10)); fi
+  swipe $((W * 19 / 20))
+  if [ "$(top_card)" = "$before" ]; then echo "  retrying swipe"; swipe $((W * 19 / 20)); fi
   [ "$(top_card)" != "$before" ] || { echo "FAIL: keep swipe didn't move on"; exit 1; }
 }
 delete_swipe 1
