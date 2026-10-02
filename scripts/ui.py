@@ -6,6 +6,7 @@
   ui.py expect TEXT    wait until TEXT is on screen
   ui.py shot NAME      save a screenshot and print the visible text
 """
+import os
 import re
 import subprocess
 import sys
@@ -59,7 +60,8 @@ def dismiss_system_anr(ns):
     return False
 
 
-def find(text, timeout=20, exact=False):
+def find(text, timeout=None, exact=False):
+    timeout = timeout or int(os.environ.get("UI_TIMEOUT", "20"))
     end = time.time() + timeout
     while time.time() < end:
         ns = nodes()

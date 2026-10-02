@@ -1,5 +1,6 @@
 package com.clearoo.app.mascot
 
+import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -22,6 +23,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -37,19 +39,19 @@ val LocalOutfit = staticCompositionLocalOf { Outfit.CLASSIC }
 @Composable
 fun Mascot(mood: Mood, modifier: Modifier = Modifier, size: Dp = 160.dp, outfit: Outfit = LocalOutfit.current) {
     val painter = remember { MascotPainter() }
+    // People who turn animations off in Android settings get a still Roo: no idle hop, no
+    // blinking, and no animation loop running in the background.
+    val context = LocalContext.current
+    val still = remember {
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    }
 
-    val idle = rememberInfiniteTransition(label = "idle")
     val hopSpeed = when (mood) {
         Mood.EXCITED, Mood.PROUD -> 520
         Mood.SAD, Mood.SLEEPY -> 2200
         else -> 1300
     }
-    val bob by idle.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(hopSpeed, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "bob",
-    )
+    val bob = if (still) 0f else idleBob(hopSpeed)
     val hop = when (mood) {
         Mood.EXCITED, Mood.PROUD -> 0.09f
         Mood.SAD, Mood.SLEEPY -> 0.015f
@@ -57,8 +59,8 @@ fun Mascot(mood: Mood, modifier: Modifier = Modifier, size: Dp = 160.dp, outfit:
     }
 
     var blink by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(Unit) {
-        while (true) {
+    LaunchedEffect(still) {
+        while (!still) {
             delay(Random.nextLong(2200, 5200))
             animate(0f, 1f, animationSpec = tween(90)) { v, _ -> blink = v }
             animate(1f, 0f, animationSpec = tween(120)) { v, _ -> blink = v }
@@ -83,4 +85,17 @@ fun Mascot(mood: Mood, modifier: Modifier = Modifier, size: Dp = 160.dp, outfit:
     ) {
         drawIntoCanvas { painter.draw(it.nativeCanvas, this.size.minDimension, mood, blink, outfit) }
     }
+}
+
+/** 0 → 1 → 0 forever: the gentle idle hop. */
+@Composable
+private fun idleBob(periodMs: Int): Float {
+    val idle = rememberInfiniteTransition(label = "idle")
+    val bob by idle.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(periodMs, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "bob",
+    )
+    return bob
 }

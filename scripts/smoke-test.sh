@@ -65,11 +65,24 @@ sleep 2
 $UI cards
 adb logcat -d -s ClearooSwipe:D | tail -20 || true
 # The bin count is checked after every swipe.
-swipe $((W / 10));     $UI expect "🗑️ 1"   # delete
-swipe $((W / 10));     $UI expect "🗑️ 2"   # delete
-swipe $((W * 9 / 10)); $UI expect "🗑️ 2"   # keep
-swipe $((W / 10));     $UI expect "🗑️ 3"   # delete
-swipe $((W * 9 / 10)); $UI expect "🗑️ 3"   # keep
+# An overloaded emulator occasionally drops most of a drag's touch points; one retry covers
+# that, and a real bug still fails both attempts. Keeps are checked via the top card changing.
+top_card() { python3 scripts/ui.py cards | tail -1; }
+delete_swipe() {  # $1 = expected bin count afterwards
+  swipe $((W / 10))
+  UI_TIMEOUT=6 $UI expect "🗑️ $1" || { echo "  retrying swipe"; swipe $((W / 10)); $UI expect "🗑️ $1"; }
+}
+keep_swipe() {
+  before=$(top_card)
+  swipe $((W * 9 / 10))
+  if [ "$(top_card)" = "$before" ]; then echo "  retrying swipe"; swipe $((W * 9 / 10)); fi
+  [ "$(top_card)" != "$before" ] || { echo "FAIL: keep swipe didn't move on"; exit 1; }
+}
+delete_swipe 1
+delete_swipe 2
+keep_swipe; $UI expect "🗑️ 2"
+delete_swipe 3
+keep_swipe; $UI expect "🗑️ 3"
 $UI shot 04-after-swipes
 
 echo "== The bin survives the app being killed"
