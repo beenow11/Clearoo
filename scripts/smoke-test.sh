@@ -25,10 +25,10 @@ push() {
   for attempt in 1 2 3; do adb push "$@" >/dev/null && return 0; sleep 5; done
   return 1
 }
-adb shell mkdir -p /sdcard/DCIM/Camera /sdcard/Pictures/Screenshots "/sdcard/Pictures/WhatsApp Images"
+adb shell mkdir -p /sdcard/DCIM/Camera /sdcard/Pictures/Screenshots /sdcard/Pictures/WhatsApp
 push media/IMG_*.jpg media/VID_1.mp4 /sdcard/DCIM/Camera/
 push media/Screenshot_*.png /sdcard/Pictures/Screenshots/
-push media/*-WA000* "/sdcard/Pictures/WhatsApp Images/"
+push media/*-WA000* /sdcard/Pictures/WhatsApp/
 adb shell content call --uri content://media --method scan_volume --arg external_primary >/dev/null || true
 sleep 3
 echo "MediaStore images: $(adb shell content query --uri content://media/external/images/media --projection _id | grep -c Row || true)"
