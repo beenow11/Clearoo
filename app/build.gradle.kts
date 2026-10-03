@@ -9,7 +9,8 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.clearoo.app"
+        // Play package name: permanent. (The Kotlin namespace below stays com.clearoo.app.)
+        applicationId = "com.roolabs.clearoo"
         // Android 11+: needed for MediaStore trash requests.
         minSdk = 30
         // Google Play requires targeting a recent Android version for new apps and updates.

@@ -54,7 +54,7 @@ Never commit the keystore to the repo.
    - Default language
    - App or game: **App**
    - Free or paid: **Free**
-2. The package name is **`com.clearoo.app`**. It's permanent once you upload, so change it now if you want something else.
+2. The package name is **`com.roolabs.clearoo`**. It's permanent once uploaded. (`com.clearoo.app` was uploaded by mistake once and is abandoned.)
 3. Under **App content**, fill in each section. Copy the answers from [`play-store/listing.md`](play-store/listing.md).
    - **Privacy policy:** `https://github.com/beenow11/Clearoo/blob/HEAD/PRIVACY.md`
    - **Ads:** No.

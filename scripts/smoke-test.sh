@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 APK=app/build/outputs/apk/qa/app-qa.apk
-PKG=com.clearoo.app
+PKG=com.roolabs.clearoo
 UI="python3 scripts/ui.py"
 mkdir -p smoke media
 
@@ -36,7 +36,7 @@ done
 adb logcat -c
 
 echo "== Onboarding"
-adb shell am start -W -n "$PKG/.MainActivity" >/dev/null
+adb shell am start -W -n "$PKG/com.clearoo.app.MainActivity" >/dev/null
 $UI shot 01-onboarding
 $UI tap "Hi Roo"
 $UI tap "Got it"
@@ -81,7 +81,7 @@ $UI shot 04-after-swipes
 
 echo "== The bin survives the app being killed"
 adb shell am force-stop "$PKG"
-adb shell am start -W -n "$PKG/.MainActivity" >/dev/null
+adb shell am start -W -n "$PKG/com.clearoo.app.MainActivity" >/dev/null
 $UI tap "Start swiping"
 $UI expect "🗑️ 3"
 
@@ -99,7 +99,7 @@ $UI shot 07-home-after
 
 echo "== Stats survive an app update"
 adb install -r "$APK"
-adb shell am start -W -n "$PKG/.MainActivity" >/dev/null
+adb shell am start -W -n "$PKG/com.clearoo.app.MainActivity" >/dev/null
 $UI expect "Today's clean-up"    # still onboarded, not back at the intro
 $UI expect "2 more deletes keep your streak"
 $UI shot 08-after-update
