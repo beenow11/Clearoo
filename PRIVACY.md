@@ -1,6 +1,6 @@
 # Clearoo Privacy Policy
 
-_Last updated: 1 October 2026_
+_Last updated: 3 October 2026_
 
 Clearoo helps you clear photos and videos from your phone. It is built so that your photos stay yours.
 
@@ -27,4 +27,4 @@ Clearoo is not directed at children under 13.
 
 ## Contact
 
-Questions about this policy: SUPPORT_EMAIL (replace with the contact email shown on your Play Store listing)
+Questions about this policy or the app: roolabs.support+clearoo@gmail.com

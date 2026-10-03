@@ -1,5 +1,9 @@
 # Play Store listing: copy and paste
 
+## Contact email
+roolabs.support+clearoo@gmail.com
+(Studio inbox for all Roo Labs apps; the +clearoo part lets Gmail label Clearoo mail automatically.)
+
 ## App name (max 30 characters)
 Clearoo: Swipe Gallery Cleaner
 

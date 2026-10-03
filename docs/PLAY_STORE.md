@@ -56,7 +56,7 @@ Never commit the keystore to the repo.
    - Free or paid: **Free**
 2. The package name is **`com.clearoo.app`**. It's permanent once you upload, so change it now if you want something else.
 3. Under **App content**, fill in each section. Copy the answers from [`play-store/listing.md`](play-store/listing.md).
-   - **Privacy policy:** `https://github.com/beenow11/Clearoo/blob/HEAD/PRIVACY.md`. First replace `SUPPORT_EMAIL` in `PRIVACY.md` with your contact email.
+   - **Privacy policy:** `https://github.com/beenow11/Clearoo/blob/HEAD/PRIVACY.md`
    - **Ads:** No.
    - **App access:** All functionality is available without special access.
    - **Content rating:** take the questionnaire. Clearoo is a utility, so answer No to everything.

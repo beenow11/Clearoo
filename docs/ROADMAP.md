@@ -4,7 +4,7 @@
 - [ ] Play Console identity verification (pending)
 - [ ] Trademark check for "Clearoo": the UK/EU/US registrations found are in classes 10, 11 and 15, none in software (9/42). Confirm there are no other class 9/42 results, and check the national registry.
 - [ ] Add the upload-key secrets to GitHub, run the "Play Store release" workflow, and test `app-release.apk`
-- [ ] Support email in `PRIVACY.md`
+- [x] Support email: roolabs.support+clearoo@gmail.com (in `PRIVACY.md` and the listing)
 - [ ] Screenshots; create the app; internal test → closed test (12 testers × 14 days) → production
 - See [PLAY_STORE.md](PLAY_STORE.md)
 
