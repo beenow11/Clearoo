@@ -10,6 +10,8 @@ data class MediaMeta(
     val album: String?,
     val relativePath: String?,
     val isFavorite: Boolean = false,
+    /** The file is known to be empty or unreadable (found while showing or scanning it). */
+    val isBroken: Boolean = false,
 )
 
 /** Smart decks: different ways of choosing which cards to show. */
@@ -22,6 +24,7 @@ enum class Deck(val emoji: String, val title: String, val blurb: String) {
     BLURRY("😵", "Blurry", "Shaky, out-of-focus shots"),
     OLD("🕰️", "Old memories", "Photos from 2+ years ago"),
     VIDEOS("🎬", "Videos", "Videos, biggest first"),
+    BROKEN("🩹", "Broken files", "Empty or damaged files that won't open"),
 }
 
 /** A card chosen for a deck, with an optional reason shown on the card. */
@@ -43,12 +46,15 @@ object DeckRules {
 
     fun isOld(m: MediaMeta, now: Long): Boolean = m.takenAtMillis > 0 && now - m.takenAtMillis > OLD_AFTER_MS
 
-    /** Photos (not screenshots) eligible for the blur scan. */
-    fun isBlurCandidate(m: MediaMeta): Boolean = !m.isVideo && !isScreenshot(m)
+    /** Empty (0 B) or known to be unreadable. */
+    fun isBroken(m: MediaMeta): Boolean = m.isBroken || m.sizeBytes <= 0
+
+    /** Photos (not screenshots or broken files) eligible for the blur scan. */
+    fun isBlurCandidate(m: MediaMeta): Boolean = !m.isVideo && !isScreenshot(m) && !isBroken(m)
 
     /** Photos taken within a few seconds of each other in the same album, oldest group first. */
     fun similarGroups(items: List<MediaMeta>): List<List<MediaMeta>> {
-        val photos = items.filter { !it.isVideo && it.takenAtMillis > 0 && !isScreenshot(it) }
+        val photos = items.filter { !it.isVideo && it.takenAtMillis > 0 && !isScreenshot(it) && !isBroken(it) }
             .sortedBy { it.takenAtMillis }
         val groups = ArrayList<List<MediaMeta>>()
         var current = ArrayList<MediaMeta>()
@@ -68,13 +74,15 @@ object DeckRules {
     fun members(deck: Deck, items: List<MediaMeta>, now: Long): List<MediaMeta> {
         val pool = items.filter { !it.isFavorite }
         return when (deck) {
-            Deck.RANDOM, Deck.BIGGEST -> pool
+            Deck.RANDOM -> pool
+            Deck.BIGGEST -> pool.filterNot(::isBroken)
             Deck.SCREENSHOTS -> pool.filter(::isScreenshot)
             Deck.CHATS -> pool.filter(::isChatMedia)
             Deck.SIMILAR -> similarGroups(pool).flatten()
             Deck.BLURRY -> pool.filter(::isBlurCandidate)
             Deck.OLD -> pool.filter { isOld(it, now) }
-            Deck.VIDEOS -> pool.filter { it.isVideo }
+            Deck.VIDEOS -> pool.filter { it.isVideo && !isBroken(it) }
+            Deck.BROKEN -> pool.filter(::isBroken)
         }
     }
 
@@ -90,10 +98,11 @@ object DeckRules {
         val pool = items.filter { it.id !in exclude && !it.isFavorite }
         return when (deck) {
             Deck.RANDOM, Deck.BLURRY -> shuffle(pool).take(count).map { Pick(it) }
-            Deck.BIGGEST -> pool.sortedByDescending { it.sizeBytes }.take(count).map { Pick(it) }
-            Deck.VIDEOS -> pool.filter { it.isVideo }.sortedByDescending { it.sizeBytes }.take(count).map { Pick(it) }
+            Deck.BIGGEST -> pool.filterNot(::isBroken).sortedByDescending { it.sizeBytes }.take(count).map { Pick(it) }
+            Deck.VIDEOS -> pool.filter { it.isVideo && !isBroken(it) }.sortedByDescending { it.sizeBytes }.take(count).map { Pick(it) }
             Deck.SCREENSHOTS -> shuffle(pool.filter(::isScreenshot)).take(count).map { Pick(it) }
             Deck.CHATS -> shuffle(pool.filter(::isChatMedia)).take(count).map { m -> Pick(m, "💬 ${m.album ?: "Chat"}") }
+            Deck.BROKEN -> pool.filter(::isBroken).sortedBy { it.takenAtMillis }.take(count).map { Pick(it, "🩹 Broken file") }
             Deck.OLD -> pool.filter { isOld(it, now) }.sortedBy { it.takenAtMillis }.take(count).map { Pick(it) }
             Deck.SIMILAR -> {
                 // Whole groups only, so look-alikes always appear back to back.

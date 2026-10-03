@@ -19,10 +19,13 @@ object ReminderScheduler {
         val request = PeriodicWorkRequestBuilder<ReminderWorker>(1, TimeUnit.DAYS)
             .setInitialDelay(Duration.between(now, next).toMillis(), TimeUnit.MILLISECONDS)
             .build()
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            WORK_NAME,
-            if (replace) ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE else ExistingPeriodicWorkPolicy.KEEP,
-            request,
-        )
+        // Never let a reminder problem (e.g. a full phone) take the app down.
+        runCatching {
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                WORK_NAME,
+                if (replace) ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE else ExistingPeriodicWorkPolicy.KEEP,
+                request,
+            )
+        }
     }
 }

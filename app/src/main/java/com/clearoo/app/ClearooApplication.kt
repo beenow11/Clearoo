@@ -1,6 +1,8 @@
 package com.clearoo.app
 
 import android.app.Application
+import android.util.Log
+import androidx.work.Configuration
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.decode.VideoFrameDecoder
@@ -13,7 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-class ClearooApplication : Application(), ImageLoaderFactory {
+class ClearooApplication : Application(), ImageLoaderFactory, Configuration.Provider {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
@@ -26,6 +28,12 @@ class ClearooApplication : Application(), ImageLoaderFactory {
             }
         }
     }
+
+    // Reminders are a nice-to-have: if their database can't be opened (e.g. storage full), carry on without them.
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setInitializationExceptionHandler { Log.w("Clearoo", "WorkManager unavailable", it) }
+            .build()
 
     override fun newImageLoader(): ImageLoader = ImageLoader.Builder(this)
         .components { add(VideoFrameDecoder.Factory()) }

@@ -36,6 +36,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.clearoo.app.domain.Deck
+import com.clearoo.app.domain.Mood
+import com.clearoo.app.domain.StorageLevel
+import com.clearoo.app.util.StorageInfo
+import com.clearoo.app.ui.theme.DeleteRed
 import com.clearoo.app.domain.MoodRules
 import com.clearoo.app.domain.Lines
 import com.clearoo.app.domain.StreakRules
@@ -106,6 +110,11 @@ fun HomeScreen(vm: ClearooViewModel, onStart: (Deck) -> Unit, onSettings: () -> 
             }
         }
 
+        vm.storage?.takeIf { it.level != StorageLevel.OK }?.let { info ->
+            Spacer(Modifier.height(12.dp))
+            StorageBanner(info, vm.deckSummaries[Deck.BROKEN]?.count ?: 0, onStart)
+        }
+
         Spacer(Modifier.height(12.dp))
         SpeechBubble(line, Modifier.padding(horizontal = 12.dp))
         Mascot(mood, Modifier.pressable(onClick = onWardrobe), size = 190.dp)
@@ -170,6 +179,44 @@ fun HomeScreen(vm: ClearooViewModel, onStart: (Deck) -> Unit, onSettings: () -> 
             )
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+/** Shown when the phone is (nearly) full: Roo points at the decks that free the most space. */
+@Composable
+private fun StorageBanner(info: StorageInfo, brokenCount: Int, onStart: (Deck) -> Unit) {
+    val full = info.level == StorageLevel.FULL
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(Surface1)
+            .border(2.dp, if (full) DeleteRed else Flame, RoundedCornerShape(22.dp))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Mascot(Mood.WORRIED, size = 56.dp)
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(
+                    if (full) "Your phone is full" else "Space is running low",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextHi,
+                )
+                Text(
+                    "Only ${Fmt.bytes(info.freeBytes)} left. Big files first, that's the fastest win!",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextLo,
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val decks = listOf(Deck.BIGGEST, Deck.VIDEOS) + if (brokenCount > 0) listOf(Deck.BROKEN) else emptyList()
+            decks.forEach { deck ->
+                Pill("${deck.emoji} ${deck.title}", Surface2, Modifier.pressable { onStart(deck) })
+            }
+        }
     }
 }
 
@@ -249,11 +296,14 @@ private fun DeckTile(
     modifier: Modifier,
     onClick: () -> Unit,
 ) {
-    val empty = summary != null && summary.count == 0
+    // Blurry and broken files are found by scanning, so those tiles always open.
+    val empty = summary != null && summary.count == 0 && deck != Deck.BROKEN
     val subtitle = when {
         deck == Deck.BLURRY -> "Roo scans for you"
+        deck == Deck.BROKEN && (summary?.count ?: 0) == 0 -> "Roo checks for you"
         !loaded -> "…"
         summary == null || empty -> "All clear 🎉"
+        deck == Deck.BROKEN -> "${String.format(Locale.getDefault(), "%,d", summary.count)} found"
         else -> "${String.format(Locale.getDefault(), "%,d", summary.count)} · ${Fmt.bytes(summary.bytes)}"
     }
     Column(

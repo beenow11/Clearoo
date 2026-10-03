@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,6 +44,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.clearoo.app.domain.Mood
+import com.clearoo.app.domain.StorageLevel
+import com.clearoo.app.ui.theme.Coral
+import com.clearoo.app.ui.theme.Surface2
 import com.clearoo.app.mascot.Mascot
 import com.clearoo.app.ui.ClearooViewModel
 import com.clearoo.app.ui.components.GradientButton
@@ -56,7 +61,9 @@ import com.clearoo.app.util.Fmt
 @Composable
 fun ReviewScreen(vm: ClearooViewModel, onBack: () -> Unit, onDeleted: () -> Unit) {
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val permanent = settings?.permanentDelete == true
+    val alwaysPermanent = settings?.permanentDelete == true
+    val phoneFull = vm.storage?.let { it.level != StorageLevel.OK } == true
+    val permanent = alwaysPermanent || vm.freeSpaceNow
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             vm.onDeleted()
@@ -107,12 +114,17 @@ fun ReviewScreen(vm: ClearooViewModel, onBack: () -> Unit, onDeleted: () -> Unit
                         .clip(RoundedCornerShape(16.dp))
                         .background(Surface1),
                 ) {
-                    AsyncImage(
-                        model = item.uri,
-                        contentDescription = item.displayName,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    if (item.isBroken) {
+                        Text("🩹", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.align(Alignment.Center))
+                    } else {
+                        AsyncImage(
+                            model = item.uri,
+                            contentDescription = item.displayName,
+                            contentScale = ContentScale.Crop,
+                            onError = { if (it.result.throwable !is OutOfMemoryError) vm.markBroken(item) },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                     if (item.isVideo) {
                         Pill("▶", Color(0x88000000), Modifier.align(Alignment.BottomStart).padding(6.dp))
                     }
@@ -133,6 +145,40 @@ fun ReviewScreen(vm: ClearooViewModel, onBack: () -> Unit, onDeleted: () -> Unit
         }
 
         Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+            // Trashed files still take space for 30 days; on a full phone offer to skip the trash.
+            if (phoneFull && !alwaysPermanent && binned.isNotEmpty()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .pressable { vm.freeSpaceNow = !vm.freeSpaceNow }
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Surface1)
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Free the space now", style = MaterialTheme.typography.titleSmall, color = TextHi)
+                        Text(
+                            "Your phone is full. Skip the trash so ${Fmt.bytes(bytes)} comes back right away.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextLo,
+                        )
+                    }
+                    Switch(
+                        checked = vm.freeSpaceNow,
+                        onCheckedChange = { vm.freeSpaceNow = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = Coral,
+                            checkedBorderColor = Coral,
+                            uncheckedThumbColor = TextLo,
+                            uncheckedTrackColor = Surface2,
+                            uncheckedBorderColor = TextLo,
+                        ),
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+            }
             GradientButton(
                 text = if (permanent) "Delete forever (${binned.size})" else "Move ${binned.size} to trash",
                 onClick = { vm.deleteRequest()?.let { launcher.launch(IntentSenderRequest.Builder(it).build()) } },
@@ -141,7 +187,11 @@ fun ReviewScreen(vm: ClearooViewModel, onBack: () -> Unit, onDeleted: () -> Unit
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                if (permanent) "This can't be undone." else "You can still recover them from your gallery's trash for 30 days.",
+                if (permanent) {
+                    "This can't be undone."
+                } else {
+                    "Recover them for 30 days from Trash in Files by Google or Google Photos."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = TextLo,
                 textAlign = TextAlign.Center,

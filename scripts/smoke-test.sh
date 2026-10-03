@@ -15,15 +15,20 @@ for i in 1 2 3; do
   ffmpeg -loglevel error -y -f lavfi -i "smptebars=size=720x1280:rate=1" -frames:v 1 "media/Screenshot_2024010${i}.png"
 done
 ffmpeg -loglevel error -y -f lavfi -i "testsrc2=size=720x1280:rate=30" -t 3 -pix_fmt yuv420p "media/VID_1.mp4"
+# Broken files, like old WhatsApp media on a well-used phone: empty, and damaged.
+: > "media/IMG-20190101-WA0001.jpg"
+head -c 40000 /dev/urandom > "media/IMG-20190102-WA0002.jpg"
+head -c 400000 /dev/urandom > "media/VID-20190103-WA0003.mp4"
 # Shared storage mounts a little after boot completes; wait for it and retry the copy.
 for _ in $(seq 1 30); do adb shell touch /sdcard/.ready 2>/dev/null && break; sleep 2; done
 push() {
   for attempt in 1 2 3; do adb push "$@" >/dev/null && return 0; sleep 5; done
   return 1
 }
-adb shell mkdir -p /sdcard/DCIM/Camera /sdcard/Pictures/Screenshots
+adb shell mkdir -p /sdcard/DCIM/Camera /sdcard/Pictures/Screenshots "/sdcard/Pictures/WhatsApp Images"
 push media/IMG_*.jpg media/VID_1.mp4 /sdcard/DCIM/Camera/
 push media/Screenshot_*.png /sdcard/Pictures/Screenshots/
+push media/*-WA000* "/sdcard/Pictures/WhatsApp Images/"
 adb shell content call --uri content://media --method scan_volume --arg external_primary >/dev/null || true
 sleep 3
 echo "MediaStore images: $(adb shell content query --uri content://media/external/images/media --projection _id | grep -c Row || true)"
@@ -120,6 +125,58 @@ adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 4)) 300; sleep
 $UI tap "Screenshots"
 $UI expect "Screenshots ·"
 $UI shot 11-screenshots-deck
+adb shell input keyevent KEYCODE_BACK; sleep 1
+
+echo "== Broken files deck"
+adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 4)) 300; sleep 1
+$UI tap "Broken files"
+$UI expect "Safe to delete"      # a broken card, not a grey square
+$UI shot 12-broken-deck
+$UI tap "Bin all"
+$UI expect "No broken files found"
+$UI shot 13-broken-binned
+adb shell input keyevent KEYCODE_BACK; sleep 1
+
+echo "== Phone storage full"
+# Fill the data partition as far as apps can go (Android keeps a reserve for the system),
+# keeping a small file back to free later so the delete itself has room.
+adb shell am force-stop "$PKG"
+adb shell fallocate -l 64M /data/local/tmp/reserve || adb shell dd if=/dev/zero of=/data/local/tmp/reserve bs=1m count=64
+avail_kb=$(adb shell df -k /data | awk 'NR==2 {print $4}')
+adb shell fallocate -l $(( (avail_kb - 8192) * 1024 )) /data/local/tmp/fill || true
+adb shell dd if=/dev/zero of=/data/local/tmp/fill2 bs=1m 2>/dev/null || true
+adb shell df -h /data | tail -1
+adb shell am start -W -n "$PKG/com.clearoo.app.MainActivity" >/dev/null
+$UI expect "Your phone is full"
+$UI shot 14-storage-full
+$UI tap "Videos"                 # the deck that crashed on a full, old phone
+$UI expect "Videos ·"
+sleep 3
+adb shell input keyevent KEYCODE_BACK; sleep 1
+$UI tap "Biggest"
+$UI expect "Biggest ·"
+# Bin counts aren't known exactly here, so check that the count changes.
+delete_swipe_any() {
+  before=$(python3 scripts/ui.py label "🗑")
+  swipe $((W / 20))
+  [ "$(python3 scripts/ui.py label "🗑")" != "$before" ] || swipe $((W / 20))
+  [ "$(python3 scripts/ui.py label "🗑")" != "$before" ] || { echo "FAIL: delete swipe on a full phone"; exit 1; }
+}
+keep_swipe                       # saving the keep fails; the app must carry on
+delete_swipe_any
+delete_swipe_any
+$UI shot 15-swiped-while-full
+adb shell rm -f /data/local/tmp/reserve
+$UI tap "🗑"
+$UI expect "Free the space now"
+$UI tap "Free the space now"
+$UI expect "Delete forever"
+$UI shot 16-bin-full
+$UI tap "Delete forever"
+$UI tapx "Allow"
+$UI expect "freed"
+$UI shot 17-freed-while-full
+adb shell rm -f /data/local/tmp/fill /data/local/tmp/fill2
 adb shell input keyevent KEYCODE_BACK; sleep 1
 
 echo "== Random stress test"

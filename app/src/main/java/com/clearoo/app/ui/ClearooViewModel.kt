@@ -22,7 +22,9 @@ import com.clearoo.app.domain.OutfitRules
 import com.clearoo.app.domain.Progress
 import com.clearoo.app.domain.StreakRules
 import com.clearoo.app.notify.Notifications
+import com.clearoo.app.util.Device
 import com.clearoo.app.util.Perms
+import com.clearoo.app.util.StorageInfo
 import com.clearoo.app.notify.ReminderScheduler
 import com.clearoo.app.widget.RooWidget
 import kotlinx.coroutines.Job
@@ -82,6 +84,13 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var lastResult by mutableStateOf<CleanResult?>(null)
         private set
+    /** Free space on the phone; null until checked. */
+    var storage by mutableStateOf<StorageInfo?>(Device.storage())
+        private set
+    /** Skip the trash for this bin, so the space comes back right away. Offered when the phone is full. */
+    var freeSpaceNow by mutableStateOf(false)
+    /** Videos only play when tapped, so old phones don't run out of memory. */
+    val tapToPlay = Device.isLowMemory(app)
 
     private val history = ArrayDeque<SwipeRecord>()
     /** Swiped (kept or binned) this session, so reloads never repeat a card. */
@@ -128,6 +137,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
     fun refreshGallery() {
         media.invalidate()
         restoreBin()
+        storage = Device.storage()
         viewModelScope.launch {
             gallery = runCatching { media.summary() }.getOrNull()
             deckSummaries = runCatching { media.deckSummaries(System.currentTimeMillis()) }.getOrDefault(emptyMap())
@@ -210,6 +220,34 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         deckExhausted = false
     }
 
+    /** A card's file couldn't be opened: show it as broken and list it in the Broken deck. */
+    fun markBroken(item: MediaItem) {
+        if (item.isBroken) return
+        media.markBroken(item.id)
+        val broken = item.copy(meta = item.meta.copy(isBroken = true))
+        deck.indexOfFirst { it.id == item.id }.takeIf { it >= 0 }?.let { deck[it] = broken }
+        pending.indexOfFirst { it.id == item.id }.takeIf { it >= 0 }?.let { pending[it] = broken }
+    }
+
+    /** Puts every card left in the deck in the bin; used for the Broken deck. */
+    fun binAll() {
+        val items = deck.toList()
+        if (items.isEmpty()) return
+        deck.clear()
+        for (item in items) {
+            swiped += item.id
+            history.addLast(SwipeRecord(item, keep = false))
+            if (history.size > MAX_UNDO) history.removeFirst()
+        }
+        pending.addAll(items.filter { item -> pending.none { it.id == item.id } })
+        saveBin()
+        canUndo = true
+        lastUndone = null
+        swipeCount += items.size
+        reaction = Reaction(Mood.EXCITED, Lines.deleteReaction(swipeCount), swipeCount)
+        loadMore()
+    }
+
     /** Un-marks an item from the bin; it counts as kept. */
     fun restore(item: MediaItem) {
         pending.removeAll { it.id == item.id }
@@ -224,7 +262,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteRequest(): IntentSender? {
         if (pending.isEmpty()) return null
-        val permanent = settings.value?.permanentDelete == true
+        val permanent = settings.value?.permanentDelete == true || freeSpaceNow
         return runCatching { media.deleteRequest(pending.toList(), permanent) }.getOrNull()
     }
 

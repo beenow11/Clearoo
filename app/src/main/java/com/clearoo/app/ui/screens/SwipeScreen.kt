@@ -190,6 +190,14 @@ fun SwipeScreen(vm: ClearooViewModel, onBack: () -> Unit, onOpenBin: () -> Unit)
             )
         }
 
+        if (vm.activeDeck == Deck.BROKEN && vm.deck.isNotEmpty()) {
+            Pill(
+                "🩹 Bin all ${vm.deck.size} broken files",
+                DeleteRed,
+                Modifier.padding(horizontal = 20.dp, vertical = 6.dp).pressable(onClick = vm::binAll),
+            )
+        }
+
         Box(
             Modifier
                 .weight(1f)
@@ -202,7 +210,11 @@ fun SwipeScreen(vm: ClearooViewModel, onBack: () -> Unit, onOpenBin: () -> Unit)
                 !hasAccess -> NoAccess { permissionLauncher.launch(Perms.media) }
                 top == null && vm.deckLoading -> DeckMessage(
                     Mood.HOPEFUL,
-                    if (vm.activeDeck == Deck.BLURRY) "Squinting at your photos… 🔍" else "Finding photos for you…",
+                    when (vm.activeDeck) {
+                        Deck.BLURRY -> "Squinting at your photos… 🔍"
+                        Deck.BROKEN -> "Checking which files won't open… 🩹"
+                        else -> "Finding photos for you…"
+                    },
                 )
                 top == null -> DeckMessage(Mood.PROUD, doneLine(vm.activeDeck)) {
                     GhostButton("Pick another deck", onBack)
@@ -234,7 +246,9 @@ fun SwipeScreen(vm: ClearooViewModel, onBack: () -> Unit, onOpenBin: () -> Unit)
                                 item = item,
                                 isTop = i == 0,
                                 muted = muted,
+                                tapToPlay = vm.tapToPlay,
                                 onToggleMute = { muted = !muted },
+                                onBroken = { vm.markBroken(item) },
                                 progress = { if (i == 0) topState.progress(deckWidth) else 0f },
                                 modifier = Modifier.fillMaxSize().then(cardModifier),
                             )
@@ -347,6 +361,7 @@ private fun DeckMessage(mood: Mood, text: String, action: @Composable () -> Unit
 private fun doneLine(deck: Deck): String = when (deck) {
     Deck.RANDOM, Deck.BIGGEST -> "All caught up! 🎉\nYou've reviewed everything for now."
     Deck.BLURRY -> "No blurry shots found 🔍\nYour photos look sharp!"
+    Deck.BROKEN -> "No broken files found 🩹\nEverything opens fine!"
     else -> "No more ${deck.title.lowercase()}! 🎉\nTry another deck."
 }
 

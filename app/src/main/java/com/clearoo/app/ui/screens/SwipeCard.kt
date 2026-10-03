@@ -40,11 +40,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
@@ -155,28 +159,50 @@ fun MediaCard(
     item: MediaItem,
     isTop: Boolean,
     muted: Boolean,
+    tapToPlay: Boolean,
     onToggleMute: () -> Unit,
+    onBroken: () -> Unit,
     progress: () -> Float,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(28.dp)
     var fit by remember(item.id) { mutableStateOf(false) }
+    var play by remember(item.id) { mutableStateOf(!tapToPlay) }
+    var cantPlay by remember(item.id) { mutableStateOf(false) }
+    val broken = item.isBroken
     Box(
         modifier
             .shadow(18.dp, shape)
             .clip(shape)
             .background(Surface1)
-            .pointerInput(item.id) {
-                detectTapGestures(onTap = { if (item.isVideo) onToggleMute() else fit = !fit })
+            .pointerInput(item.id, play, broken) {
+                detectTapGestures(
+                    onTap = {
+                        when {
+                            broken -> Unit
+                            item.isVideo && !play -> play = true
+                            item.isVideo -> onToggleMute()
+                            else -> fit = !fit
+                        }
+                    },
+                )
             },
     ) {
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current).data(item.uri).crossfade(true).build(),
-            contentDescription = item.displayName,
-            contentScale = if (fit) ContentScale.Fit else ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
-        )
-        if (item.isVideo && isTop) VideoLayer(item, muted, Modifier.fillMaxSize())
+        if (broken) {
+            BrokenFace(Modifier.fillMaxSize().semantics { contentDescription = item.displayName })
+        } else {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current).data(item.uri).crossfade(true).build(),
+                contentDescription = item.displayName,
+                contentScale = if (fit) ContentScale.Fit else ContentScale.Crop,
+                // Running out of memory says nothing about the file, so only real read failures count.
+                onError = { if (it.result.throwable !is OutOfMemoryError) onBroken() },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        if (item.isVideo && isTop && play && !broken && !cantPlay) {
+            VideoLayer(item, muted, onError = { cantPlay = true }, modifier = Modifier.fillMaxSize())
+        }
 
         // Colour wash that grows as you drag.
         Box(
@@ -201,9 +227,12 @@ fun MediaCard(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(Fmt.age(item.takenAtMillis), style = MaterialTheme.typography.headlineMedium, color = Color.White)
+            if (broken) {
+                Text(item.displayName, style = MaterialTheme.typography.bodyMedium, color = Color.White, maxLines = 1)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (item.takenAtMillis > 0) Pill(Fmt.date(item.takenAtMillis), Color(0x33FFFFFF))
-                Pill(Fmt.bytes(item.sizeBytes), Color(0x33FFFFFF))
+                if (item.sizeBytes > 0) Pill(Fmt.bytes(item.sizeBytes), Color(0x33FFFFFF))
                 item.album?.let { Pill(it, Color(0x33FFFFFF)) }
             }
         }
@@ -212,13 +241,18 @@ fun MediaCard(
             Pill(it, Color(0x99000000), Modifier.align(Alignment.TopStart).padding(16.dp))
         }
 
-        if (item.isVideo) {
+        if (item.isVideo && !broken) {
             Row(
                 Modifier.align(Alignment.TopEnd).padding(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Pill("▶ ${Fmt.duration(item.durationMs)}", Color(0x66000000))
-                if (isTop) Pill(if (muted) "🔇" else "🔊", Color(0x66000000))
+                when {
+                    !isTop -> Unit
+                    cantPlay -> Pill("Can't play", Color(0x66000000))
+                    !play -> Pill("Tap to play", Color(0x66000000))
+                    else -> Pill(if (muted) "🔇" else "🔊", Color(0x66000000))
+                }
             }
         }
 
@@ -230,6 +264,26 @@ fun MediaCard(
             "DELETE", DeleteRed, 14f,
             Modifier.align(Alignment.TopEnd).padding(top = 64.dp, end = 24.dp),
         ) { (-progress()).coerceIn(0f, 1f) }
+    }
+}
+
+/** Shown instead of a grey square when the file is empty or damaged. */
+@Composable
+private fun BrokenFace(modifier: Modifier) {
+    Column(
+        modifier.padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("🩹", style = MaterialTheme.typography.displayMedium)
+        Text("Broken file", style = MaterialTheme.typography.headlineSmall, color = Color.White)
+        Text(
+            "It's empty or damaged and won't open anywhere. Safe to delete.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xB3FFFFFF),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 6.dp, bottom = 96.dp),
+        )
     }
 }
 
@@ -255,7 +309,7 @@ private data class VideoFit(val size: IntSize)
 
 /** Muted looping preview on the top card, drawn into a TextureView so it rotates with the card. */
 @Composable
-private fun VideoLayer(item: MediaItem, muted: Boolean, modifier: Modifier) {
+private fun VideoLayer(item: MediaItem, muted: Boolean, onError: () -> Unit, modifier: Modifier) {
     val context = LocalContext.current
     val player = remember(item.id) {
         ExoPlayer.Builder(context).build().apply {
@@ -277,6 +331,11 @@ private fun VideoLayer(item: MediaItem, muted: Boolean, modifier: Modifier) {
 
             override fun onVideoSizeChanged(size: VideoSize) {
                 videoSize = IntSize((size.width * size.pixelWidthHeightRatio).toInt(), size.height)
+            }
+
+            // Damaged file or no decoder for it: fall back to the still frame.
+            override fun onPlayerError(error: PlaybackException) {
+                onError()
             }
         }
         player.addListener(listener)

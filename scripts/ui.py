@@ -5,6 +5,7 @@
   ui.py tapx TEXT      tap the element whose text is exactly TEXT (e.g. a dialog button)
   ui.py expect TEXT    wait until TEXT is on screen
   ui.py shot NAME      save a screenshot and print the visible text
+  ui.py label TEXT     print the first on-screen text containing TEXT (empty if none)
 """
 import os
 import re
@@ -20,8 +21,20 @@ def adb(*args, check=True):
     return subprocess.run(["adb", *args], check=check, capture_output=True).stdout
 
 
+def parse(raw):
+    end = raw.rfind(b"</hierarchy>")
+    if end < 0:
+        raise ET.ParseError("no hierarchy")
+    return list(ET.fromstring(raw[raw.find(b"<"):end + len(b"</hierarchy>")]).iter("node"))
+
+
 def nodes():
     for _ in range(3):
+        # Dump straight to stdout: no file to write, so it also works when storage is full.
+        try:
+            return parse(adb("exec-out", "uiautomator", "dump", "/dev/tty", check=False))
+        except ET.ParseError:
+            pass
         adb("shell", "rm", "-f", "/sdcard/ui.xml", check=False)
         adb("shell", "uiautomator", "dump", "/sdcard/ui.xml", check=False)
         raw = adb("shell", "cat", "/sdcard/ui.xml", check=False)
@@ -107,6 +120,8 @@ if __name__ == "__main__":
         shot(arg)
     elif cmd == "cards":
         cards()
+    elif cmd == "label":
+        print(next((t for t in visible_text(nodes()) if norm(arg) in t), ""))
     else:
         n, ns = find(arg, exact=(cmd == "tapx"))
         if n is None:

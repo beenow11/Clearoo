@@ -17,10 +17,16 @@ import com.clearoo.app.domain.NO_DAY
 import com.clearoo.app.domain.Outfit
 import com.clearoo.app.domain.Progress
 import com.clearoo.app.domain.StreakRules
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /*
  * Two stores, split by what survives a move to a new phone:
@@ -44,6 +50,48 @@ private val Context.deviceStore: DataStore<Preferences> by preferencesDataStore(
 /** A read error (not corruption) should show defaults, not crash. */
 private fun DataStore<Preferences>.safeData(): Flow<Preferences> = data.catch { emit(emptyPreferences()) }
 
+/**
+ * A store whose saves never throw. When a save fails (most often because the phone's storage
+ * is full, which is exactly when people need Clearoo), the change is kept in memory, shown as
+ * if it were saved, and written together with the next save that succeeds.
+ */
+private class SafeStore(private val store: DataStore<Preferences>) {
+    private val unsaved = MutableStateFlow<List<(MutablePreferences) -> Unit>>(emptyList())
+    private val lock = Mutex()
+
+    val data: Flow<Preferences> = combine(store.data, unsaved) { saved, ops ->
+        if (ops.isEmpty()) saved else saved.toMutablePreferences().apply { ops.forEach { it(this) } }
+    }
+
+    /** Applies [op] and returns the resulting preferences, saved or not. */
+    suspend fun edit(op: (MutablePreferences) -> Unit): Preferences = lock.withLock {
+        val queued = unsaved.value
+        try {
+            store.edit { p ->
+                queued.forEach { it(p) }
+                op(p)
+            }.also { unsaved.value = emptyList() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            unsaved.value = queued + op
+            data.first()
+        }
+    }
+}
+
+/** One SafeStore per file for the whole process, so every screen, the widget and the worker agree. */
+private object Stores {
+    private var main: SafeStore? = null
+    private var device: SafeStore? = null
+
+    @Synchronized
+    fun main(context: Context): SafeStore = main ?: SafeStore(context.clearooStore).also { main = it }
+
+    @Synchronized
+    fun device(context: Context): SafeStore = device ?: SafeStore(context.deviceStore).also { device = it }
+}
+
 data class AppSettings(
     val reminderHour: Int = 19,
     val reminderMinute: Int = 30,
@@ -54,8 +102,8 @@ data class AppSettings(
 )
 
 class PrefsRepository(context: Context) {
-    private val store = context.applicationContext.clearooStore
-    private val device = context.applicationContext.deviceStore
+    private val store = Stores.main(context.applicationContext)
+    private val device = Stores.device(context.applicationContext)
 
     private object Keys {
         val STREAK = intPreferencesKey("streak")
@@ -84,9 +132,9 @@ class PrefsRepository(context: Context) {
         val BIN_IDS = stringSetPreferencesKey("bin_ids")
     }
 
-    val progress: Flow<Progress> = store.safeData().map { it.toProgress() }.distinctUntilChanged()
+    val progress: Flow<Progress> = store.data.map { it.toProgress() }.distinctUntilChanged()
 
-    val settings: Flow<AppSettings> = store.safeData().map { p ->
+    val settings: Flow<AppSettings> = store.data.map { p ->
         val defaults = AppSettings()
         AppSettings(
             reminderHour = p[Keys.REMINDER_HOUR] ?: defaults.reminderHour,
@@ -98,10 +146,10 @@ class PrefsRepository(context: Context) {
         )
     }.distinctUntilChanged()
 
-    val keptIds: Flow<Set<Long>> = device.safeData().map { p -> p[DeviceKeys.KEPT_IDS].toIds() }
+    val keptIds: Flow<Set<Long>> = device.data.map { p -> p[DeviceKeys.KEPT_IDS].toIds() }
 
     /** Items waiting in the bin, so a swipe session survives the app being closed. */
-    val binIds: Flow<Set<Long>> = device.safeData().map { p -> p[DeviceKeys.BIN_IDS].toIds() }
+    val binIds: Flow<Set<Long>> = device.data.map { p -> p[DeviceKeys.BIN_IDS].toIds() }
 
     suspend fun setBin(ids: Collection<Long>) {
         device.edit { p -> p[DeviceKeys.BIN_IDS] = ids.map { it.toString() }.toSet() }
@@ -109,14 +157,9 @@ class PrefsRepository(context: Context) {
 
     /** Returns (before, after) so callers can tell whether the streak just grew. */
     suspend fun recordDeletion(count: Int, bytes: Long, today: Long): Pair<Progress, Progress> {
-        lateinit var result: Pair<Progress, Progress>
-        store.edit { p ->
-            val before = p.toProgress()
-            val after = StreakRules.recordDeletion(before, count, bytes, today)
-            p.write(after)
-            result = before to after
-        }
-        return result
+        val before = progress.first()
+        val after = store.edit { p -> p.write(StreakRules.recordDeletion(p.toProgress(), count, bytes, today)) }.toProgress()
+        return before to after
     }
 
     suspend fun recordReview(delta: Int, today: Long) {

@@ -18,7 +18,8 @@ class DeckRulesTest {
         path: String? = "DCIM/Camera/",
         video: Boolean = false,
         favorite: Boolean = false,
-    ) = MediaMeta(id, video, size, taken, name, album, path, favorite)
+        broken: Boolean = false,
+    ) = MediaMeta(id, video, size, taken, name, album, path, favorite, broken)
 
     @Test
     fun `detects screenshots and chat media`() {
@@ -72,5 +73,22 @@ class DeckRulesTest {
         val checker = IntArray(w * w) { i -> if ((i % w + i / w) % 2 == 0) 0 else 255 }
         assertTrue(Blur.laplacianVariance(flat, w, w) < Blur.THRESHOLD)
         assertTrue(Blur.laplacianVariance(checker, w, w) > Blur.THRESHOLD)
+    }
+
+    @Test
+    fun `broken files get their own deck and stay out of size-based decks`() {
+        val items = listOf(
+            meta(1, size = 0, taken = now - 900 * day),
+            meta(2, size = 5_000, broken = true, video = true),
+            meta(3, size = 4_000, video = true),
+            meta(4, size = 10),
+        )
+        val broken = DeckRules.pick(Deck.BROKEN, items, emptySet(), count = 5, now = now)
+        assertEquals(listOf(1L, 2L), broken.map { it.meta.id })
+        assertEquals("🩹 Broken file", broken[0].badge)
+        assertEquals(listOf(3L, 4L), DeckRules.pick(Deck.BIGGEST, items, emptySet(), 5, now).map { it.meta.id })
+        assertEquals(listOf(3L), DeckRules.pick(Deck.VIDEOS, items, emptySet(), 5, now).map { it.meta.id })
+        assertEquals(listOf(1L, 2L), DeckRules.members(Deck.BROKEN, items, now).map { it.id })
+        assertFalse(DeckRules.isBlurCandidate(items[0]))
     }
 }

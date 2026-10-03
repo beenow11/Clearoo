@@ -30,6 +30,7 @@ data class MediaItem(
     val takenAtMillis get() = meta.takenAtMillis
     val displayName get() = meta.displayName
     val album get() = meta.album
+    val isBroken get() = DeckRules.isBroken(meta)
 }
 
 data class GallerySummary(val count: Int, val bytes: Long)
@@ -45,11 +46,25 @@ class MediaRepository(context: Context) {
     private var cache: List<MediaItem>? = null
     /** Blur scores by id; survive deck reloads so photos are only scanned once per run. */
     private val blurScores = HashMap<Long, Double>()
+    /** Files that failed to open this run (on a card, or in a scan). */
+    private val brokenIds = HashSet<Long>()
+    /** Files already checked by the broken-file scan. */
+    private val probed = HashSet<Long>()
 
     /** Forget the cached gallery, e.g. after items were trashed. */
     fun invalidate() {
         cache = null
     }
+
+    /** Remembers that [id] could not be opened, so it moves to the Broken deck. */
+    fun markBroken(id: Long) {
+        synchronized(brokenIds) { brokenIds += id }
+    }
+
+    private fun isKnownBroken(id: Long) = synchronized(brokenIds) { id in brokenIds }
+
+    /** Gallery items with what this run learned about broken files. */
+    private suspend fun metas(): List<MediaMeta> = all().map { if (isKnownBroken(it.id)) it.meta.copy(isBroken = true) else it.meta }
 
     /** Items still in the gallery, for restoring a saved bin. */
     suspend fun itemsByIds(ids: Set<Long>): List<MediaItem> = all().filter { it.id in ids }
@@ -59,9 +74,9 @@ class MediaRepository(context: Context) {
         return GallerySummary(all.size, all.sumOf { it.sizeBytes })
     }
 
-    /** Count and size per deck. Blurry is left out: it is only known after a scan. */
+    /** Count and size per deck. Blurry is left out: it is only known after a scan. Broken counts what is known so far. */
     suspend fun deckSummaries(now: Long): Map<Deck, GallerySummary> = withContext(Dispatchers.Default) {
-        val metas = all().map { it.meta }
+        val metas = metas()
         Deck.entries.filter { it != Deck.BLURRY }.associateWith { deck ->
             val members = DeckRules.members(deck, metas, now)
             GallerySummary(members.size, members.sumOf { it.sizeBytes })
@@ -69,12 +84,14 @@ class MediaRepository(context: Context) {
     }
 
     suspend fun batch(deck: Deck, exclude: Set<Long>, count: Int, now: Long): List<MediaItem> {
-        val all = all()
-        val byId = all.associateBy { it.id }
-        val metas = all.map { it.meta }
-        if (deck == Deck.BLURRY) return blurryBatch(metas, byId, exclude, count)
+        val byId = all().associateBy { it.id }
+        if (deck == Deck.BLURRY) return blurryBatch(metas(), byId, exclude, count)
+        if (deck == Deck.BROKEN) probeForBroken(metas(), exclude)
+        val metas = metas()
         return withContext(Dispatchers.Default) {
-            DeckRules.pick(deck, metas, exclude, count, now).mapNotNull { p -> byId[p.meta.id]?.copy(badge = p.badge) }
+            DeckRules.pick(deck, metas, exclude, count, now).mapNotNull { p ->
+                byId[p.meta.id]?.copy(meta = p.meta, badge = p.badge)
+            }
         }
     }
 
@@ -92,6 +109,23 @@ class MediaRepository(context: Context) {
         return pending.intentSender
     }
 
+    /**
+     * Tries to open a sample of files that look most likely to be broken (chat and old media
+     * first). Anything that can't be opened is marked broken.
+     */
+    private suspend fun probeForBroken(metas: List<MediaMeta>, exclude: Set<Long>) = withContext(Dispatchers.IO) {
+        val byId = all().associateBy { it.id }
+        metas
+            .filter { it.id !in exclude && it.id !in probed && !DeckRules.isBroken(it) }
+            .sortedWith(compareByDescending<MediaMeta> { DeckRules.isChatMedia(it) }.thenBy { it.takenAtMillis })
+            .take(PROBE_SAMPLE)
+            .forEach { m ->
+                probed += m.id
+                val item = byId[m.id] ?: return@forEach
+                if (runCatching { resolver.loadThumbnail(item.uri, Size(PROBE_PX, PROBE_PX), null) }.isFailure) markBroken(m.id)
+            }
+    }
+
     /** Scores a random sample of photos and returns the blurriest. */
     private suspend fun blurryBatch(
         metas: List<MediaMeta>,
@@ -101,7 +135,12 @@ class MediaRepository(context: Context) {
     ): List<MediaItem> = withContext(Dispatchers.IO) {
         val candidates = metas.filter { it.id !in exclude && !it.isFavorite && DeckRules.isBlurCandidate(it) }
         candidates.filter { it.id !in blurScores }.shuffled().take(BLUR_SAMPLE).forEach { m ->
-            byId[m.id]?.let { blurScores[m.id] = runCatching { blurScore(it.uri) }.getOrDefault(Double.MAX_VALUE) }
+            byId[m.id]?.let { item ->
+                blurScores[m.id] = runCatching { blurScore(item.uri) }.getOrElse {
+                    markBroken(m.id)
+                    Double.MAX_VALUE
+                }
+            }
         }
         candidates
             .mapNotNull { m -> blurScores[m.id]?.takeIf { it < Blur.THRESHOLD }?.let { m to it } }
@@ -176,5 +215,7 @@ class MediaRepository(context: Context) {
     private companion object {
         const val BLUR_SAMPLE = 120
         const val BLUR_PX = 256
+        const val PROBE_SAMPLE = 150
+        const val PROBE_PX = 64
     }
 }
