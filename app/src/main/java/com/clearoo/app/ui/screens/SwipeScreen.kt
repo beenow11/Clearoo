@@ -192,7 +192,7 @@ fun SwipeScreen(vm: ClearooViewModel, onBack: () -> Unit, onOpenBin: () -> Unit)
 
         if (vm.activeDeck == Deck.BROKEN && vm.deck.isNotEmpty()) {
             Pill(
-                "🩹 Bin all ${vm.deck.size} broken files",
+                if (vm.deck.size == 1) "🩹 Bin the broken file" else "🩹 Bin all ${vm.deck.size} broken files",
                 DeleteRed,
                 Modifier.padding(horizontal = 20.dp, vertical = 6.dp).pressable(onClick = vm::binAll),
             )

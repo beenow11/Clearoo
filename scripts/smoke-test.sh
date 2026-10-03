@@ -132,7 +132,7 @@ adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 4)) 300; sleep
 $UI tap "Broken files"
 $UI expect "Safe to delete"      # a broken card, not a grey square
 $UI shot 12-broken-deck
-$UI tap "Bin all"
+$UI tap "🩹 Bin "
 $UI expect "No broken files found"
 $UI shot 13-broken-binned
 adb shell input keyevent KEYCODE_BACK; sleep 1
