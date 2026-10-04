@@ -15,7 +15,7 @@ data class MediaMeta(
 )
 
 /** Smart decks: different ways of choosing which cards to show. */
-enum class Deck(val emoji: String, val title: String, val blurb: String) {
+enum class Deck(val emoji: String, val title: String, val blurb: String, val onHome: Boolean = true) {
     RANDOM("🎲", "Quick mix", "A random handful from your gallery"),
     BIGGEST("🐘", "Biggest", "Largest files first: the most space per swipe"),
     SCREENSHOTS("📸", "Screenshots", "Screenshots and screen recordings"),
@@ -25,6 +25,8 @@ enum class Deck(val emoji: String, val title: String, val blurb: String) {
     OLD("🕰️", "Old memories", "Photos from 2+ years ago"),
     VIDEOS("🎬", "Videos", "Videos, biggest first"),
     BROKEN("🩹", "Broken files", "Empty or damaged files that won't open"),
+    /** Only inside albums: needs a scan of every photo. */
+    DUPLICATES("👯", "Duplicates", "Near-identical copies", onHome = false),
 }
 
 /** A card chosen for a deck, with an optional reason shown on the card. */
@@ -83,6 +85,7 @@ object DeckRules {
             Deck.OLD -> pool.filter { isOld(it, now) }
             Deck.VIDEOS -> pool.filter { it.isVideo && !isBroken(it) }
             Deck.BROKEN -> pool.filter(::isBroken)
+            Deck.DUPLICATES -> emptyList()
         }
     }
 
@@ -103,6 +106,7 @@ object DeckRules {
             Deck.SCREENSHOTS -> shuffle(pool.filter(::isScreenshot)).take(count).map { Pick(it) }
             Deck.CHATS -> shuffle(pool.filter(::isChatMedia)).take(count).map { m -> Pick(m, "💬 ${m.album ?: "Chat"}") }
             Deck.BROKEN -> pool.filter(::isBroken).sortedBy { it.takenAtMillis }.take(count).map { Pick(it, "🩹 Broken file") }
+            Deck.DUPLICATES -> emptyList()
             Deck.OLD -> pool.filter { isOld(it, now) }.sortedBy { it.takenAtMillis }.take(count).map { Pick(it) }
             Deck.SIMILAR -> {
                 // Whole groups only, so look-alikes always appear back to back.

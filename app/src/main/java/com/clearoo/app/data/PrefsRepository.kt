@@ -13,6 +13,8 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.clearoo.app.domain.Album
+import com.clearoo.app.domain.AlbumRules
 import com.clearoo.app.domain.NO_DAY
 import com.clearoo.app.domain.Outfit
 import com.clearoo.app.domain.Progress
@@ -130,6 +132,7 @@ class PrefsRepository(context: Context) {
     private object DeviceKeys {
         val KEPT_IDS = stringSetPreferencesKey("kept_ids")
         val BIN_IDS = stringSetPreferencesKey("bin_ids")
+        val ALBUMS = stringPreferencesKey("albums")
     }
 
     val progress: Flow<Progress> = store.data.map { it.toProgress() }.distinctUntilChanged()
@@ -150,6 +153,13 @@ class PrefsRepository(context: Context) {
 
     /** Items waiting in the bin, so a swipe session survives the app being closed. */
     val binIds: Flow<Set<Long>> = device.data.map { p -> p[DeviceKeys.BIN_IDS].toIds() }
+
+    /** The user's albums, newest first. Device-only: they list MediaStore ids. */
+    val albums: Flow<List<Album>> = device.data.map { p -> AlbumRules.decode(p[DeviceKeys.ALBUMS]) }.distinctUntilChanged()
+
+    suspend fun setAlbums(albums: List<Album>) {
+        device.edit { p -> p[DeviceKeys.ALBUMS] = AlbumRules.encode(albums) }
+    }
 
     suspend fun setBin(ids: Collection<Long>) {
         device.edit { p -> p[DeviceKeys.BIN_IDS] = ids.map { it.toString() }.toSet() }

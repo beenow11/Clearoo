@@ -70,7 +70,13 @@ import java.util.Locale
 import java.time.format.TextStyle as DayStyle
 
 @Composable
-fun HomeScreen(vm: ClearooViewModel, onStart: (Deck) -> Unit, onSettings: () -> Unit, onWardrobe: () -> Unit) {
+fun HomeScreen(
+    vm: ClearooViewModel,
+    onStart: (Deck) -> Unit,
+    onSettings: () -> Unit,
+    onWardrobe: () -> Unit,
+    onAlbums: () -> Unit,
+) {
     val context = LocalContext.current
     val progress by vm.progress.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -160,6 +166,8 @@ fun HomeScreen(vm: ClearooViewModel, onStart: (Deck) -> Unit, onSettings: () -> 
         GradientButton(if (deleted >= goal) "Keep swiping 🔥" else "Start swiping", { onStart(Deck.RANDOM) })
         Spacer(Modifier.height(24.dp))
         SmartDecks(vm.deckSummaries, onStart)
+        Spacer(Modifier.height(10.dp))
+        AlbumsTile(onAlbums)
         Spacer(Modifier.height(24.dp))
 
         val (freed, unit) = Fmt.bytesParts(progress.totalFreed)
@@ -267,7 +275,7 @@ private fun WeekStrip(goalDays: Set<Long>, today: Long) {
 /** Two-column grid of smart decks. Roo recommends the one that frees the most space. */
 @Composable
 private fun SmartDecks(summaries: Map<Deck, GallerySummary>, onStart: (Deck) -> Unit) {
-    val decks = Deck.entries.filter { it != Deck.RANDOM }
+    val decks = Deck.entries.filter { it != Deck.RANDOM && it.onHome }
     val rooPick = summaries
         .filterKeys { it != Deck.RANDOM && it != Deck.BIGGEST }
         .filterValues { it.count > 0 }
@@ -284,6 +292,29 @@ private fun SmartDecks(summaries: Map<Deck, GallerySummary>, onStart: (Deck) -> 
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
+    }
+}
+
+/** Way into Albums: clean up a trip or event on its own. */
+@Composable
+private fun AlbumsTile(onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressable(onClick = onClick)
+            .clip(RoundedCornerShape(22.dp))
+            .background(Surface1)
+            .border(2.dp, Violet, RoundedCornerShape(22.dp))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("🗂️", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Albums", style = MaterialTheme.typography.titleMedium, color = TextHi)
+            Text("Clean up a trip: blurry shots & duplicates", style = MaterialTheme.typography.bodySmall, color = TextLo, maxLines = 1)
+        }
+        Pill("New", Violet)
     }
 }
 

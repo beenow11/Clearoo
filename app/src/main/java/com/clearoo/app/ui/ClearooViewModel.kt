@@ -8,11 +8,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.clearoo.app.data.AlbumScan
 import com.clearoo.app.data.AppSettings
 import com.clearoo.app.data.GallerySummary
 import com.clearoo.app.data.MediaItem
 import com.clearoo.app.data.MediaRepository
+import com.clearoo.app.data.MoveResult
 import com.clearoo.app.data.PrefsRepository
+import com.clearoo.app.domain.Album
+import com.clearoo.app.domain.AlbumRules
 import com.clearoo.app.domain.Deck
 import com.clearoo.app.domain.Lines
 import com.clearoo.app.domain.Mood
@@ -58,6 +62,8 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         prefs.progress.stateIn(viewModelScope, SharingStarted.Eagerly, Progress())
     val settings: StateFlow<AppSettings?> =
         prefs.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val albums: StateFlow<List<Album>> =
+        prefs.albums.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /** deck[0] is the card on top. */
     val deck = mutableStateListOf<MediaItem>()
@@ -82,6 +88,22 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
     /** Which smart deck the cards come from. */
     var activeDeck by mutableStateOf(Deck.RANDOM)
         private set
+    /** The album the deck is limited to; null for the whole gallery. */
+    var deckAlbum by mutableStateOf<Album?>(null)
+        private set
+
+    /** Photos still in each album, by album id. */
+    var albumItems by mutableStateOf<Map<Long, List<MediaItem>>>(emptyMap())
+        private set
+    /** Scan of the album that is open: blurry photos and duplicates. */
+    var albumScan by mutableStateOf<AlbumScan?>(null)
+        private set
+    /** (done, total) while an album is being scanned. */
+    var scanProgress by mutableStateOf<Pair<Int, Int>?>(null)
+        private set
+    var moveResult by mutableStateOf<MoveResult?>(null)
+        private set
+    private var scanJob: Job? = null
     var lastResult by mutableStateOf<CleanResult?>(null)
         private set
     /** Free space on the phone; null until checked. */
@@ -149,13 +171,14 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         if (deck.isEmpty()) loadMore()
     }
 
-    /** Switches to [mode]; the bin and undo history carry over. */
-    fun startDeck(mode: Deck) {
-        if (mode == activeDeck && deck.isNotEmpty()) return
+    /** Switches to [mode], within [album] if given; the bin and undo history carry over. */
+    fun startDeck(mode: Deck, album: Album? = null) {
+        if (mode == activeDeck && album?.id == deckAlbum?.id && deck.isNotEmpty()) return
         loadJob?.cancel()
         generation++
         deckLoading = false
         activeDeck = mode
+        deckAlbum = album
         deck.clear()
         lastUndone = null
         deckExhausted = false
@@ -166,11 +189,18 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         if (deckLoading) return
         deckLoading = true
         val mode = activeDeck
+        val album = deckAlbum
+        val scan = albumScan
         val gen = generation
         loadJob = viewModelScope.launch {
-            val exclude = prefs.keptIds.first() + swiped + pending.map { it.id } + deck.map { it.id }
+            val shown = swiped + pending.map { it.id } + deck.map { it.id }
             val batch = runCatching {
-                media.batch(mode, exclude, BATCH_SIZE, System.currentTimeMillis())
+                if (album != null) {
+                    // An album shows all its photos again, even ones kept elsewhere before.
+                    media.albumBatch(mode, album.ids, scan, shown, BATCH_SIZE)
+                } else {
+                    media.batch(mode, prefs.keptIds.first() + shown, BATCH_SIZE, System.currentTimeMillis())
+                }
             }.getOrDefault(emptyList())
             if (gen != generation) return@launch
             deck.addAll(batch)
@@ -291,6 +321,71 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
             )
             refreshWidget()
             media.invalidate()
+            refreshGallery()
+        }
+    }
+
+    /** Reloads every album's photos and forgets ones that were deleted. */
+    fun refreshAlbums() {
+        viewModelScope.launch {
+            val list = prefs.albums.first()
+            val present = runCatching { media.itemsByIds(list.flatMap { it.ids }.toSet()) }.getOrNull() ?: return@launch
+            val byId = present.associateBy { it.id }
+            albumItems = list.associate { a -> a.id to a.ids.mapNotNull { byId[it] }.sortedBy { it.takenAtMillis } }
+            val pruned = list.map { a -> a.copy(ids = a.ids.filterTo(LinkedHashSet()) { it in byId }) }
+            if (pruned != list) prefs.setAlbums(pruned)
+        }
+    }
+
+    suspend fun itemsInRange(startMillis: Long, endMillis: Long): List<MediaItem> =
+        runCatching { media.itemsInRange(startMillis, endMillis) }.getOrDefault(emptyList())
+
+    /** Saves a new album and returns it. */
+    suspend fun createAlbum(name: String, ids: Set<Long>): Album {
+        val album = Album(System.currentTimeMillis(), AlbumRules.cleanName(name), ids)
+        prefs.setAlbums(listOf(album) + albums.value)
+        refreshAlbums()
+        return album
+    }
+
+    /** Forgets the album; its photos stay where they are. */
+    fun removeAlbum(album: Album) {
+        viewModelScope.launch {
+            prefs.setAlbums(albums.value.filter { it.id != album.id })
+            refreshAlbums()
+        }
+    }
+
+    /** Opens [album]: scans its photos for blur and duplicates. */
+    fun openAlbum(album: Album) {
+        scanJob?.cancel()
+        albumScan = null
+        moveResult = null
+        scanProgress = 0 to album.ids.size
+        refreshAlbums()
+        scanJob = viewModelScope.launch {
+            albumScan = runCatching {
+                media.scanAlbum(album.ids) { done, total -> scanProgress = done to total }
+            }.getOrNull()
+            scanProgress = null
+        }
+    }
+
+    fun albumById(id: Long): Album? = albums.value.firstOrNull { it.id == id }
+
+    /** Asks Android for permission to move the album's photos. */
+    fun moveRequest(album: Album): IntentSender? {
+        val items = albumItems[album.id].orEmpty()
+        if (items.isEmpty()) return null
+        return runCatching { media.writeRequest(items) }.getOrNull()
+    }
+
+    /** Moves the album's photos into a folder named after it, once Android allowed it. */
+    fun moveAlbum(album: Album) {
+        val items = albumItems[album.id].orEmpty()
+        viewModelScope.launch {
+            moveResult = media.moveTo(items, AlbumRules.folderPath(album.name))
+            refreshAlbums()
             refreshGallery()
         }
     }

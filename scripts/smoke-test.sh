@@ -11,6 +11,7 @@ echo "== Sample gallery"
 for i in $(seq 1 14); do
   ffmpeg -loglevel error -y -f lavfi -i "testsrc2=size=720x1280:rate=1" -vf "hue=h=$((i * 25))" -frames:v 1 "media/IMG_$i.jpg"
 done
+cp media/IMG_2.jpg media/IMG_2b.jpg   # an exact duplicate, for the Albums scan
 for i in 1 2 3; do
   ffmpeg -loglevel error -y -f lavfi -i "smptebars=size=720x1280:rate=1" -frames:v 1 "media/Screenshot_2024010${i}.png"
 done
@@ -137,6 +138,39 @@ $UI expect "No broken files found"
 $UI shot 13-broken-binned
 adb shell input keyevent KEYCODE_BACK; sleep 1
 
+echo "== Albums"
+adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 4)) 300; sleep 1
+$UI tap "Albums"
+$UI tap "New album"
+$UI tap "Album name"
+adb shell input text London; sleep 1
+$UI expect "selected"
+$UI shot 14-new-album
+$UI tap "Create album"
+$UI expect "Everything"
+UI_TIMEOUT=90 $UI expect "duplicates"   # Roo's scan has finished
+$UI shot 15-album
+if python3 scripts/ui.py label "duplicates" | grep -q "Found"; then
+  python3 scripts/ui.py label "duplicates"
+fi
+$UI tap "Everything"
+$UI expect "London · Everything"
+keep_swipe
+$UI shot 16-album-deck
+adb shell input keyevent KEYCODE_BACK; sleep 1
+$UI expect "Make it a gallery album"
+$UI tap "Move to"
+$UI tapx "Allow"                 # Android asks before the photos are moved
+$UI expect "Moved"
+$UI shot 17-album-moved
+moved=$(adb shell ls /sdcard/Pictures/London | wc -l)
+echo "Files in Pictures/London: $moved"
+[ "$moved" -gt 0 ] || { echo "FAIL: nothing was moved"; exit 1; }
+adb shell input keyevent KEYCODE_BACK; sleep 1
+$UI expect "London"
+adb shell input keyevent KEYCODE_BACK; sleep 1
+$UI expect "Today's clean-up"
+
 echo "== Phone storage full"
 # Fill the data partition as far as apps can go (Android keeps a reserve for the system),
 # keeping a small file back to free later so the delete itself has room.
@@ -148,7 +182,7 @@ adb shell dd if=/dev/zero of=/data/local/tmp/fill2 bs=1m 2>/dev/null || true
 adb shell df -h /data | tail -1
 adb shell am start -W -n "$PKG/com.clearoo.app.MainActivity" >/dev/null
 $UI expect "Your phone is full"
-$UI shot 14-storage-full
+$UI shot 18-storage-full
 $UI tap "Videos"                 # the deck that crashed on a full, old phone
 $UI expect "Videos ·"
 sleep 3
@@ -165,17 +199,17 @@ delete_swipe_any() {
 keep_swipe                       # saving the keep fails; the app must carry on
 delete_swipe_any
 delete_swipe_any
-$UI shot 15-swiped-while-full
+$UI shot 19-swiped-while-full
 adb shell rm -f /data/local/tmp/reserve
 $UI tap "🗑"
 $UI expect "Free the space now"
 $UI tap "Free the space now"
 $UI expect "Delete forever"
-$UI shot 16-bin-full
+$UI shot 20-bin-full
 $UI tap "Delete forever"
 $UI tapx "Allow"
 $UI expect "freed"
-$UI shot 17-freed-while-full
+$UI shot 21-freed-while-full
 adb shell rm -f /data/local/tmp/fill /data/local/tmp/fill2
 adb shell input keyevent KEYCODE_BACK; sleep 1
 

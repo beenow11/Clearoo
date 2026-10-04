@@ -1,6 +1,7 @@
 package com.clearoo.app.data
 
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Context
 import android.content.IntentSender
 import android.graphics.Bitmap
@@ -8,11 +9,14 @@ import android.graphics.Color
 import android.net.Uri
 import android.provider.MediaStore
 import android.util.Size
+import com.clearoo.app.domain.AlbumRules
 import com.clearoo.app.domain.Blur
 import com.clearoo.app.domain.Deck
 import com.clearoo.app.domain.DeckRules
+import com.clearoo.app.domain.Duplicates
 import com.clearoo.app.domain.MediaMeta
 import kotlinx.coroutines.Dispatchers
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -35,6 +39,11 @@ data class MediaItem(
 
 data class GallerySummary(val count: Int, val bytes: Long)
 
+/** What a scan of an album found: blurry photos (blurriest first) and groups of duplicates. */
+data class AlbumScan(val blurry: List<Long>, val duplicates: List<List<Long>>)
+
+data class MoveResult(val moved: Int, val failed: Int)
+
 class MediaRepository(context: Context) {
     private val resolver = context.applicationContext.contentResolver
     private val filesUri = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL)
@@ -45,11 +54,13 @@ class MediaRepository(context: Context) {
     private val lock = Mutex()
     private var cache: List<MediaItem>? = null
     /** Blur scores by id; survive deck reloads so photos are only scanned once per run. */
-    private val blurScores = HashMap<Long, Double>()
+    private val blurScores = ConcurrentHashMap<Long, Double>()
+    /** Duplicate-finding hashes by id, filled by album scans. */
+    private val hashes = ConcurrentHashMap<Long, Long>()
     /** Files that failed to open this run (on a card, or in a scan). */
     private val brokenIds = HashSet<Long>()
     /** Files already checked by the broken-file scan. */
-    private val probed = HashSet<Long>()
+    private val probed: MutableSet<Long> = ConcurrentHashMap.newKeySet()
 
     /** Forget the cached gallery, e.g. after items were trashed. */
     fun invalidate() {
@@ -66,6 +77,81 @@ class MediaRepository(context: Context) {
     /** Gallery items with what this run learned about broken files. */
     private suspend fun metas(): List<MediaMeta> = all().map { if (isKnownBroken(it.id)) it.meta.copy(isBroken = true) else it.meta }
 
+    /** Gallery items taken between two times, oldest first; for picking an album's photos. */
+    suspend fun itemsInRange(startMillis: Long, endMillis: Long): List<MediaItem> {
+        val byId = all().associateBy { it.id }
+        return AlbumRules.inRange(metas(), startMillis, endMillis).mapNotNull { byId[it.id] }
+    }
+
+    /**
+     * Checks every photo in an album for blur and duplicates. Results are cached, so opening
+     * the album again is quick. [onProgress] gets (done, total).
+     */
+    suspend fun scanAlbum(ids: Set<Long>, onProgress: (Int, Int) -> Unit): AlbumScan = withContext(Dispatchers.IO) {
+        val photos = itemsByIds(ids)
+            .filter { !it.isVideo && !it.isBroken && !isKnownBroken(it.id) }
+            .sortedBy { it.takenAtMillis }
+        photos.forEachIndexed { i, item ->
+            if (item.id !in blurScores || item.id !in hashes) {
+                runCatching { thumbStats(item.uri) }
+                    .onSuccess { (blur, hash) ->
+                        blurScores[item.id] = blur
+                        hashes[item.id] = hash
+                    }
+                    .onFailure { markBroken(item.id) }
+            }
+            onProgress(i + 1, photos.size)
+        }
+        val blurry = photos.mapNotNull { p -> blurScores[p.id]?.takeIf { it < Blur.THRESHOLD }?.let { p.id to it } }
+            .sortedBy { it.second }
+            .map { it.first }
+        val duplicates = Duplicates.groups(photos.mapNotNull { p -> hashes[p.id]?.let { p.id to it } })
+        AlbumScan(blurry, duplicates)
+    }
+
+    /** Cards for one of an album's decks: Everything (in date order), Blurry or Duplicates. */
+    suspend fun albumBatch(deck: Deck, ids: Set<Long>, scan: AlbumScan?, exclude: Set<Long>, count: Int): List<MediaItem> {
+        val byId = itemsByIds(ids).associateBy { it.id }
+        return when (deck) {
+            Deck.BLURRY -> scan?.blurry.orEmpty()
+                .filter { it !in exclude }
+                .take(count)
+                .mapNotNull { byId[it]?.copy(badge = "😵 Looks blurry") }
+            Deck.DUPLICATES -> {
+                // Whole groups at a time, so copies always sit next to each other.
+                val out = ArrayList<MediaItem>()
+                for (group in scan?.duplicates.orEmpty()) {
+                    if (out.size >= count) break
+                    val left = group.filter { it !in exclude }
+                    if (left.isEmpty()) continue
+                    left.forEachIndexed { i, id ->
+                        byId[id]?.let { out += it.copy(badge = "👯 Duplicate ${i + 1}/${left.size}") }
+                    }
+                }
+                out
+            }
+            else -> byId.values.filter { it.id !in exclude }.sortedBy { it.takenAtMillis }.take(count)
+        }
+    }
+
+    /** System request for write access to [items], needed before moving them. */
+    fun writeRequest(items: List<MediaItem>): IntentSender =
+        MediaStore.createWriteRequest(resolver, items.map { it.uri }).intentSender
+
+    /** Moves [items] into [relativePath] (e.g. "Pictures/London/"). Call after [writeRequest] was allowed. */
+    suspend fun moveTo(items: List<MediaItem>, relativePath: String): MoveResult = withContext(Dispatchers.IO) {
+        var moved = 0
+        var failed = 0
+        for (item in items) {
+            if (item.meta.relativePath == relativePath) continue
+            val values = ContentValues().apply { put(MediaStore.MediaColumns.RELATIVE_PATH, relativePath) }
+            val ok = runCatching { resolver.update(item.uri, values, null, null) > 0 }.getOrDefault(false)
+            if (ok) moved++ else failed++
+        }
+        invalidate()
+        MoveResult(moved, failed)
+    }
+
     /** Items still in the gallery, for restoring a saved bin. */
     suspend fun itemsByIds(ids: Set<Long>): List<MediaItem> = all().filter { it.id in ids }
 
@@ -77,7 +163,7 @@ class MediaRepository(context: Context) {
     /** Count and size per deck. Blurry is left out: it is only known after a scan. Broken counts what is known so far. */
     suspend fun deckSummaries(now: Long): Map<Deck, GallerySummary> = withContext(Dispatchers.Default) {
         val metas = metas()
-        Deck.entries.filter { it != Deck.BLURRY }.associateWith { deck ->
+        Deck.entries.filter { it != Deck.BLURRY && it.onHome }.associateWith { deck ->
             val members = DeckRules.members(deck, metas, now)
             GallerySummary(members.size, members.sumOf { it.sizeBytes })
         }
@@ -149,18 +235,26 @@ class MediaRepository(context: Context) {
             .mapNotNull { (m, _) -> byId[m.id]?.copy(badge = "😵 Looks blurry") }
     }
 
-    private fun blurScore(uri: Uri): Double {
+    private fun blurScore(uri: Uri): Double = thumbStats(uri).first
+
+    /** Blur score and duplicate hash, from one small thumbnail. */
+    private fun thumbStats(uri: Uri): Pair<Double, Long> {
         var bitmap = resolver.loadThumbnail(uri, Size(BLUR_PX, BLUR_PX), null)
         if (bitmap.config == Bitmap.Config.HARDWARE) bitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        val blur = luma(bitmap).let { Blur.laplacianVariance(it, bitmap.width, bitmap.height) }
+        val tiny = Bitmap.createScaledBitmap(bitmap, Duplicates.HASH_W, Duplicates.HASH_H, true)
+        return blur to Duplicates.dHash(luma(tiny))
+    }
+
+    private fun luma(bitmap: Bitmap): IntArray {
         val w = bitmap.width
         val h = bitmap.height
         val pixels = IntArray(w * h)
         bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
-        val luma = IntArray(pixels.size) { i ->
+        return IntArray(pixels.size) { i ->
             val c = pixels[i]
             (Color.red(c) * 299 + Color.green(c) * 587 + Color.blue(c) * 114) / 1000
         }
-        return Blur.laplacianVariance(luma, w, h)
     }
 
     private suspend fun all(): List<MediaItem> = lock.withLock {

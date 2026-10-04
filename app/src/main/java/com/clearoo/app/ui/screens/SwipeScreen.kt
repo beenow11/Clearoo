@@ -165,7 +165,13 @@ fun SwipeScreen(vm: ClearooViewModel, onBack: () -> Unit, onOpenBin: () -> Unit)
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextHi)
             }
-            GoalBar(vm.activeDeck, count, goal, Modifier.weight(1f).padding(horizontal = 12.dp))
+            val album = vm.deckAlbum
+            val label = if (album != null) {
+                "🗂️ ${album.name} · ${vm.activeDeck.albumTitle()}"
+            } else {
+                "${vm.activeDeck.emoji} ${vm.activeDeck.title}"
+            }
+            GoalBar(label, count, goal, Modifier.weight(1f).padding(horizontal = 12.dp))
             BinButton(vm.pending.size, onOpenBin)
         }
 
@@ -216,7 +222,10 @@ fun SwipeScreen(vm: ClearooViewModel, onBack: () -> Unit, onOpenBin: () -> Unit)
                         else -> "Finding photos for you…"
                     },
                 )
-                top == null -> DeckMessage(Mood.PROUD, doneLine(vm.activeDeck)) {
+                top == null -> DeckMessage(
+                    Mood.PROUD,
+                    vm.deckAlbum?.let { "All done in ${it.name}! 🎉\nTry another pile." } ?: doneLine(vm.activeDeck),
+                ) {
                     GhostButton("Pick another deck", onBack)
                 }
                 else -> {
@@ -277,7 +286,7 @@ fun SwipeScreen(vm: ClearooViewModel, onBack: () -> Unit, onOpenBin: () -> Unit)
 }
 
 @Composable
-private fun GoalBar(deck: Deck, count: Int, goal: Int, modifier: Modifier = Modifier) {
+private fun GoalBar(label: String, count: Int, goal: Int, modifier: Modifier = Modifier) {
     val fraction by animateFloatAsState(
         (count.toFloat() / goal).coerceIn(0f, 1f),
         spring(dampingRatio = 0.7f, stiffness = 200f),
@@ -285,7 +294,7 @@ private fun GoalBar(deck: Deck, count: Int, goal: Int, modifier: Modifier = Modi
     )
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            "${deck.emoji} ${deck.title} · $count/$goal",
+            "$label · $count/$goal",
             style = MaterialTheme.typography.labelMedium,
             color = TextLo,
             maxLines = 1,
