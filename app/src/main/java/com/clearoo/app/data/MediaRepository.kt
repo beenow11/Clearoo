@@ -54,9 +54,9 @@ class MediaRepository(context: Context) {
     private val lock = Mutex()
     private var cache: List<MediaItem>? = null
     /** Blur scores by id; survive deck reloads so photos are only scanned once per run. */
-    private val blurScores = ConcurrentHashMap<Long, Double>()
+    private val blurScores: MutableMap<Long, Double> = ConcurrentHashMap()
     /** Duplicate-finding hashes by id, filled by album scans. */
-    private val hashes = ConcurrentHashMap<Long, Long>()
+    private val hashes: MutableMap<Long, Long> = ConcurrentHashMap()
     /** Files that failed to open this run (on a card, or in a scan). */
     private val brokenIds = HashSet<Long>()
     /** Files already checked by the broken-file scan. */
