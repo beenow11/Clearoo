@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -344,6 +345,8 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun createAlbum(name: String, ids: Set<Long>): Album {
         val album = Album(System.currentTimeMillis(), AlbumRules.cleanName(name), ids)
         prefs.setAlbums(listOf(album) + albums.value)
+        // Wait until the album list includes it, so the album screen can find it straight away.
+        withTimeoutOrNull(2_000) { albums.first { list -> list.any { it.id == album.id } } }
         refreshAlbums()
         return album
     }

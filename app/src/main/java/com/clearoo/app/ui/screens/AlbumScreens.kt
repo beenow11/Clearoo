@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -242,7 +243,8 @@ fun NewAlbumScreen(vm: ClearooViewModel, onBack: () -> Unit, onCreated: (Album) 
     }
 
     val cleanName = AlbumRules.cleanName(name)
-    Column(Modifier.fillMaxSize().systemBarsPadding()) {
+    // imePadding keeps the Create button above the keyboard.
+    Column(Modifier.fillMaxSize().systemBarsPadding().imePadding()) {
         TopBar("New album", onBack)
         LazyVerticalGrid(
             columns = GridCells.Fixed(4),
