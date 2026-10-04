@@ -20,6 +20,10 @@ ffmpeg -loglevel error -y -f lavfi -i "testsrc2=size=720x1280:rate=30" -t 3 -pix
 : > "media/IMG-20190101-WA0001.jpg"
 head -c 40000 /dev/urandom > "media/IMG-20190102-WA0002.jpg"
 head -c 400000 /dev/urandom > "media/VID-20190103-WA0003.mp4"
+# Twice over, so the random swipes earlier on can't use them all up.
+: > "media/IMG-20190104-WA0004.jpg"
+head -c 40000 /dev/urandom > "media/IMG-20190105-WA0005.jpg"
+head -c 400000 /dev/urandom > "media/VID-20190106-WA0006.mp4"
 # Shared storage mounts a little after boot completes; wait for it and retry the copy.
 for _ in $(seq 1 30); do adb shell touch /sdcard/.ready 2>/dev/null && break; sleep 2; done
 push() {
