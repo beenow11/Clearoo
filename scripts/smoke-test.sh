@@ -123,6 +123,12 @@ $UI tap "Settings"
 $UI expect "Reminder time"
 $UI shot 10-settings
 $UI tap "Preview reminder"
+adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 4)) 300; sleep 1
+$UI tap "Send feedback"
+sleep 2
+# An email app may open (or a toast shows if there is none); come back to Settings either way.
+UI_TIMEOUT=3 $UI expect "Send feedback" >/dev/null 2>&1 || { adb shell input keyevent KEYCODE_BACK; sleep 2; }
+$UI expect "Send feedback"
 adb shell input keyevent KEYCODE_BACK; sleep 1
 
 echo "== Smart deck"

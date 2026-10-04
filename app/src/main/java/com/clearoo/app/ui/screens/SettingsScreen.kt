@@ -57,6 +57,7 @@ import com.clearoo.app.ui.theme.Surface1
 import com.clearoo.app.ui.theme.Surface2
 import com.clearoo.app.ui.theme.TextHi
 import com.clearoo.app.ui.theme.TextLo
+import com.clearoo.app.util.Feedback
 import com.clearoo.app.util.Fmt
 import com.clearoo.app.util.Perms
 
@@ -178,6 +179,14 @@ fun SettingsScreen(vm: ClearooViewModel, onBack: () -> Unit) {
                 vm.resetKept()
                 keptCleared = true
             }
+        }
+
+        Section("Help") {
+            SettingRow(
+                title = "Send feedback",
+                subtitle = "Ideas, bugs or questions? Roo reads every one",
+                value = "Email",
+            ) { Feedback.send(context) }
         }
 
         Spacer(Modifier.height(12.dp))
