@@ -43,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDateRangePickerState
@@ -190,6 +191,27 @@ private fun AlbumRow(album: Album, photos: List<MediaItem>?, onClick: () -> Unit
     }
 }
 
+/** Only today and earlier: an album is for photos already taken. */
+@OptIn(ExperimentalMaterial3Api::class)
+private object PastDates : SelectableDates {
+    override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis.utcDate() <= LocalDate.now()
+    override fun isSelectableYear(year: Int): Boolean = year <= LocalDate.now().year
+}
+
+/** "4 – 12 Oct 2026", "28 Sep – 3 Oct 2026", or a prompt while the range is half picked. */
+private fun rangeText(start: LocalDate?, end: LocalDate?): String {
+    if (start == null) return "Pick the first day"
+    val full = DateTimeFormatter.ofPattern("d MMM yyyy")
+    if (end == null) return "${start.format(full)} – pick the last day"
+    if (start == end) return start.format(full)
+    val first = when {
+        start.year != end.year -> full
+        start.month != end.month -> DateTimeFormatter.ofPattern("d MMM")
+        else -> DateTimeFormatter.ofPattern("d")
+    }
+    return "${start.format(first)} – ${end.format(full)}"
+}
+
 private fun LocalDate.utcMillis(): Long = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 private fun Long.utcDate(): LocalDate = Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
 private fun LocalDate.localStart(): Long = atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -221,6 +243,7 @@ fun NewAlbumScreen(vm: ClearooViewModel, onBack: () -> Unit, onCreated: (Album) 
         val state = rememberDateRangePickerState(
             initialSelectedStartDateMillis = start.utcMillis(),
             initialSelectedEndDateMillis = end.utcMillis(),
+            selectableDates = PastDates,
         )
         DatePickerDialog(
             onDismissRequest = { pickingDates = false },
@@ -238,7 +261,30 @@ fun NewAlbumScreen(vm: ClearooViewModel, onBack: () -> Unit, onCreated: (Album) 
             },
             dismissButton = { TextButton(onClick = { pickingDates = false }) { Text("Cancel") } },
         ) {
-            DateRangePicker(state = state, modifier = Modifier.weight(1f))
+            // Material's own title and headline are laid out for a full screen and wrap in a dialog.
+            DateRangePicker(
+                state = state,
+                modifier = Modifier.weight(1f),
+                title = {
+                    Text(
+                        "Trip dates",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = TextLo,
+                        modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp),
+                    )
+                },
+                headline = {
+                    Text(
+                        rangeText(state.selectedStartDateMillis?.utcDate(), state.selectedEndDateMillis?.utcDate()),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = TextHi,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(start = 24.dp, end = 12.dp, bottom = 12.dp),
+                    )
+                },
+                showModeToggle = false,
+            )
         }
     }
 
@@ -466,24 +512,30 @@ fun AlbumScreen(vm: ClearooViewModel, albumId: Long, onBack: () -> Unit, onStart
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text("📁 Make it a gallery album", style = MaterialTheme.typography.titleMedium, color = TextHi)
+                        // Only photos not already in the folder are moved, so the button never redoes work.
+                        val toMove = vm.notInFolder(album).size
+                        val inFolder = present.size - toMove
                         Text(
-                            "Optional. Moves these ${present.size} photos into $folder, so “${album.name}” shows up in your gallery app.",
+                            when {
+                                toMove == 0 -> "✅ All ${present.size} photos are in $folder. Look for “${album.name}” in your gallery app."
+                                inFolder > 0 -> "$inFolder photos are already in $folder. $toMove more can be moved there."
+                                else -> "Optional. Moves these ${present.size} photos into $folder, so “${album.name}” shows up in your gallery app."
+                            },
                             style = MaterialTheme.typography.bodySmall,
-                            color = TextLo,
+                            color = if (toMove == 0) KeepGreen else TextLo,
                         )
-                        vm.moveResult?.let { r ->
+                        vm.moveResult?.takeIf { it.failed > 0 }?.let { r ->
                             Text(
-                                buildString {
-                                    append("✅ Moved ${r.moved} to $folder")
-                                    if (r.failed > 0) append(" · ${r.failed} couldn't be moved")
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = KeepGreen,
+                                "${r.failed} couldn't be moved. They may belong to another app; try again later.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextLo,
                             )
                         }
-                        GhostButton("Move to “${album.name}” folder", {
-                            vm.moveRequest(album)?.let { moveLauncher.launch(IntentSenderRequest.Builder(it).build()) }
-                        })
+                        if (toMove > 0) {
+                            GhostButton(if (toMove == 1) "Move 1 photo" else "Move $toMove photos", {
+                                vm.moveRequest(album)?.let { moveLauncher.launch(IntentSenderRequest.Builder(it).build()) }
+                            })
+                        }
                     }
                 }
             }

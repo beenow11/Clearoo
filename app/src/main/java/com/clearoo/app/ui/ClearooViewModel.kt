@@ -376,16 +376,22 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
 
     fun albumById(id: Long): Album? = albums.value.firstOrNull { it.id == id }
 
+    /** The album's photos that aren't in its folder yet. */
+    fun notInFolder(album: Album): List<MediaItem> {
+        val folder = AlbumRules.folderPath(album.name).trimEnd('/')
+        return albumItems[album.id].orEmpty().filter { it.meta.relativePath?.trimEnd('/') != folder }
+    }
+
     /** Asks Android for permission to move the album's photos. */
     fun moveRequest(album: Album): IntentSender? {
-        val items = albumItems[album.id].orEmpty()
+        val items = notInFolder(album)
         if (items.isEmpty()) return null
         return runCatching { media.writeRequest(items) }.getOrNull()
     }
 
     /** Moves the album's photos into a folder named after it, once Android allowed it. */
     fun moveAlbum(album: Album) {
-        val items = albumItems[album.id].orEmpty()
+        val items = notInFolder(album)
         viewModelScope.launch {
             moveResult = media.moveTo(items, AlbumRules.folderPath(album.name))
             refreshAlbums()

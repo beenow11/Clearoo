@@ -165,9 +165,9 @@ fun HomeScreen(
         Spacer(Modifier.height(18.dp))
         GradientButton(if (deleted >= goal) "Keep swiping 🔥" else "Start swiping", { onStart(Deck.RANDOM) })
         Spacer(Modifier.height(24.dp))
-        SmartDecks(vm.deckSummaries, onStart)
-        Spacer(Modifier.height(10.dp))
         AlbumsTile(onAlbums)
+        Spacer(Modifier.height(24.dp))
+        SmartDecks(vm.deckSummaries, onStart)
         Spacer(Modifier.height(24.dp))
 
         val (freed, unit) = Fmt.bytesParts(progress.totalFreed)

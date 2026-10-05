@@ -140,6 +140,7 @@ adb shell input keyevent KEYCODE_BACK; sleep 1
 
 echo "== Broken files deck"
 adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 4)) 300; sleep 1
+adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 2)) 300; sleep 1
 $UI tap "Broken files"
 $UI expect "Safe to delete"      # a broken card, not a grey square
 $UI shot 12-broken-deck
@@ -169,10 +170,12 @@ keep_swipe
 $UI shot 16-album-deck
 adb shell input keyevent KEYCODE_BACK; sleep 1
 $UI expect "Make it a gallery album"
-$UI tap "Move to"
+$UI tap "Move "                  # "Move N photos"
 $UI tapx "Allow"                 # Android asks before the photos are moved
-$UI expect "Moved"
+$UI expect "are in Pictures/London"
 $UI shot 17-album-moved
+# Everything is in the folder now, so there is nothing left to move.
+[ -z "$(python3 scripts/ui.py label "Move ")" ] || { echo "FAIL: move button still offered"; exit 1; }
 moved=$(adb shell ls /sdcard/Pictures/London | wc -l)
 echo "Files in Pictures/London: $moved"
 [ "$moved" -gt 0 ] || { echo "FAIL: nothing was moved"; exit 1; }
