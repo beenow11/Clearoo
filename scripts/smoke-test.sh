@@ -184,6 +184,21 @@ $UI expect "London"
 adb shell input keyevent KEYCODE_BACK; sleep 1
 $UI expect "Today's clean-up"
 
+echo "== Unused apps"
+adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 2)) 300; sleep 1
+$UI tap "Unused apps"
+$UI expect "Allow usage access"       # asks for Usage access first
+$UI shot 17b-unused-apps-locked
+adb shell appops set "$PKG" GET_USAGE_STATS allow
+adb shell input keyevent KEYCODE_BACK; sleep 1
+$UI tap "Unused apps"
+$UI expect "Not opened in"
+$UI tap "90 days"
+$UI expect "Not opened in"
+$UI shot 17c-unused-apps
+adb shell input keyevent KEYCODE_BACK; sleep 1
+$UI expect "Today's clean-up"
+
 echo "== Phone storage full"
 # Fill the data partition as far as apps can go (Android keeps a reserve for the system),
 # keeping a small file back to free later so the delete itself has room.

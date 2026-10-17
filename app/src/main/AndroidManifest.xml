@@ -14,6 +14,22 @@
         android:name="android.permission.MANAGE_MEDIA"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- Unused apps: when each app was last opened and how big it is. Granted by the user in
+         Android's Usage access settings; the data never leaves the phone. -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- Lets Unused apps open Android's own uninstall confirmation. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+
+    <!-- Only apps with a launcher icon are listed, so no all-packages access is needed. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:name=".ClearooApplication"
         android:allowBackup="true"

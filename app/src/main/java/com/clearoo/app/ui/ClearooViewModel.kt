@@ -10,6 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.clearoo.app.data.AlbumScan
 import com.clearoo.app.data.AppSettings
+import com.clearoo.app.data.AppsRepository
 import com.clearoo.app.data.GallerySummary
 import com.clearoo.app.data.MediaItem
 import com.clearoo.app.data.MediaRepository
@@ -17,6 +18,7 @@ import com.clearoo.app.data.MoveResult
 import com.clearoo.app.data.PrefsRepository
 import com.clearoo.app.domain.Album
 import com.clearoo.app.domain.AlbumRules
+import com.clearoo.app.domain.AppMeta
 import com.clearoo.app.domain.Deck
 import com.clearoo.app.domain.Lines
 import com.clearoo.app.domain.Mood
@@ -58,6 +60,7 @@ data class CleanResult(
 class ClearooViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = PrefsRepository(app)
     private val media = MediaRepository(app)
+    private val apps = AppsRepository(app)
 
     val progress: StateFlow<Progress> =
         prefs.progress.stateIn(viewModelScope, SharingStarted.Eagerly, Progress())
@@ -105,6 +108,20 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
     var moveResult by mutableStateOf<MoveResult?>(null)
         private set
     private var scanJob: Job? = null
+
+    /** Whether the user allowed Usage access, which the unused-apps list needs. */
+    var usageAccess by mutableStateOf(false)
+        private set
+    /** Installed apps; null until loaded. */
+    var installedApps by mutableStateOf<List<AppMeta>?>(null)
+        private set
+    /** Apps removed from the unused list this session, and the space they took. */
+    var appsRemoved by mutableStateOf(0)
+        private set
+    var appsFreed by mutableStateOf(0L)
+        private set
+    private var uninstalling: AppMeta? = null
+    private var appsJob: Job? = null
     var lastResult by mutableStateOf<CleanResult?>(null)
         private set
     /** Free space on the phone; null until checked. */
@@ -397,6 +414,40 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
             refreshAlbums()
             refreshGallery()
         }
+    }
+
+    /** Re-checks Usage access and reloads the app list; keeps the old list on screen meanwhile. */
+    fun refreshApps() {
+        usageAccess = apps.hasUsageAccess()
+        if (!usageAccess) {
+            installedApps = null
+            return
+        }
+        if (appsJob?.isActive == true) return
+        appsJob = viewModelScope.launch {
+            installedApps = runCatching { apps.apps(System.currentTimeMillis()) }.getOrDefault(installedApps.orEmpty())
+        }
+    }
+
+    fun usageAccessIntents() = listOf(apps.usageAccessIntent(), apps.usageAccessFallbackIntent())
+
+    fun appIcon(pkg: String) = apps.icon(pkg)
+
+    /** Android's uninstall dialog for [app], then its settings page if that dialog isn't available. */
+    fun uninstallIntents(app: AppMeta): List<android.content.Intent> {
+        uninstalling = app
+        return listOf(apps.uninstallIntent(app.packageName), apps.detailsIntent(app.packageName))
+    }
+
+    /** Back from the uninstall dialog: counts the app if it is really gone. */
+    fun onUninstallReturned() {
+        val app = uninstalling ?: return
+        uninstalling = null
+        if (apps.isInstalled(app.packageName)) return
+        appsRemoved++
+        appsFreed += app.sizeBytes
+        installedApps = installedApps?.filter { it.packageName != app.packageName }
+        storage = Device.storage()
     }
 
     fun completeOnboarding(hour: Int, minute: Int) {

@@ -76,6 +76,7 @@ fun HomeScreen(
     onSettings: () -> Unit,
     onWardrobe: () -> Unit,
     onAlbums: () -> Unit,
+    onUnusedApps: () -> Unit,
 ) {
     val context = LocalContext.current
     val progress by vm.progress.collectAsStateWithLifecycle()
@@ -165,7 +166,9 @@ fun HomeScreen(
         Spacer(Modifier.height(18.dp))
         GradientButton(if (deleted >= goal) "Keep swiping 🔥" else "Start swiping", { onStart(Deck.RANDOM) })
         Spacer(Modifier.height(24.dp))
-        AlbumsTile(onAlbums)
+        FeatureTile("🗂️", "Albums", "Clean up a trip: blurry shots & duplicates", null, onAlbums)
+        Spacer(Modifier.height(10.dp))
+        FeatureTile("📱", "Unused apps", "Apps you haven't opened in a month", "New", onUnusedApps)
         Spacer(Modifier.height(24.dp))
         SmartDecks(vm.deckSummaries, onStart)
         Spacer(Modifier.height(24.dp))
@@ -295,26 +298,26 @@ private fun SmartDecks(summaries: Map<Deck, GallerySummary>, onStart: (Deck) -> 
     }
 }
 
-/** Way into Albums: clean up a trip or event on its own. */
+/** A full-width way into a tool (Albums, Unused apps); a [badge] also outlines it. */
 @Composable
-private fun AlbumsTile(onClick: () -> Unit) {
+private fun FeatureTile(emoji: String, title: String, subtitle: String, badge: String?, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .pressable(onClick = onClick)
             .clip(RoundedCornerShape(22.dp))
             .background(Surface1)
-            .border(2.dp, Violet, RoundedCornerShape(22.dp))
+            .then(if (badge != null) Modifier.border(2.dp, Violet, RoundedCornerShape(22.dp)) else Modifier)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("🗂️", style = MaterialTheme.typography.headlineSmall)
+        Text(emoji, style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text("Albums", style = MaterialTheme.typography.titleMedium, color = TextHi)
-            Text("Clean up a trip: blurry shots & duplicates", style = MaterialTheme.typography.bodySmall, color = TextLo, maxLines = 1)
+            Text(title, style = MaterialTheme.typography.titleMedium, color = TextHi)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = TextLo, maxLines = 1)
         }
-        Pill("New", Violet)
+        badge?.let { Pill(it, Violet) }
     }
 }
 
