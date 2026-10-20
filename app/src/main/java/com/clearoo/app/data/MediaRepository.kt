@@ -77,6 +77,20 @@ class MediaRepository(context: Context) {
     /** Gallery items with what this run learned about broken files. */
     private suspend fun metas(): List<MediaMeta> = all().map { if (isKnownBroken(it.id)) it.meta.copy(isBroken = true) else it.meta }
 
+    /**
+     * Photos for Roo's Pouch: about two thirds from the decks most likely to be junk (screenshots,
+     * chat media, look-alikes, old), the rest random, shuffled together. Photos only.
+     */
+    suspend fun pouchBatch(exclude: Set<Long>, count: Int, now: Long): List<MediaItem> = withContext(Dispatchers.Default) {
+        val byId = all().associateBy { it.id }
+        val photos = metas().filter { !it.isVideo && !DeckRules.isBroken(it) }
+        val junkDecks = listOf(Deck.SCREENSHOTS, Deck.CHATS, Deck.SIMILAR, Deck.OLD)
+        val junk = junkDecks.flatMap { DeckRules.pick(it, photos, exclude, count, now) }.map { it.meta.id }.distinct().shuffled()
+        val taken = junk.take(count * 2 / 3).toSet()
+        val random = DeckRules.pick(Deck.RANDOM, photos, exclude + taken, count - taken.size, now).map { it.meta.id }
+        (taken + random).shuffled().mapNotNull { byId[it] }
+    }
+
     /** Gallery items taken between two times, oldest first; for picking an album's photos. */
     suspend fun itemsInRange(startMillis: Long, endMillis: Long): List<MediaItem> {
         val byId = all().associateBy { it.id }

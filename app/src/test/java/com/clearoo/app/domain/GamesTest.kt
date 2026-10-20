@@ -22,53 +22,50 @@ class GamesTest {
     }
 
     @Test
-    fun `one free run a day, three more once the streak is secured`() {
-        assertEquals(1, PlayRules.runsLeft(securedToday = false, runsDay = 5, runsUsed = 0, today = 5))
-        assertEquals(0, PlayRules.runsLeft(false, 5, 1, 5))
-        assertEquals(3, PlayRules.runsLeft(true, 5, 1, 5))
-        // Yesterday's runs don't count today.
-        assertEquals(4, PlayRules.runsLeft(true, 4, 4, 5))
+    fun `photos fly up into view and fall away when left alone`() {
+        val rng = Random(7)
+        var s = PouchGame.start(height = 180f, queue = listOf(1L, 2L, 3L))
+        s = PouchGame.step(s, 0.05f, rng)
+        repeat(20) { s = PouchGame.step(s, 0.05f, rng) }
+        assertTrue(s.flyers.isNotEmpty())
+        val peak = s.flyers.first()
+        assertTrue("rises into the top half", (0 until 60).map { s = PouchGame.step(s, 0.05f, rng); s.flyers.firstOrNull { it.id == peak.id }?.y ?: 999f }.min() < 90f)
+        repeat(400) { s = PouchGame.step(s, 0.05f, rng) }
+        assertTrue(s.over)
+        assertEquals(3, s.skipped)
+        assertTrue(s.pouch.isEmpty())
     }
 
     @Test
-    fun `jumping lifts Roo and gravity brings him back`() {
-        var s = HopGame.jump(HopState())
-        assertTrue(s.rooVy > 0)
-        // No double jumps in the air.
-        s = HopGame.step(s, 0.05f, Random(1))
-        assertEquals(s, HopGame.jump(s))
-        repeat(40) { s = HopGame.step(s.copy(things = emptyList(), untilSpawn = 99f), 0.05f, Random(1)) }
-        assertTrue(s.onGround)
+    fun `a swipe through a photo drops it in the pouch, with combos`() {
+        val a = Flyer(0, 10L, x = 10f, y = 50f, vx = 0f, vy = 0f, spin = 0f)
+        val b = Flyer(1, 11L, x = 50f, y = 50f, vx = 0f, vy = 0f, spin = 0f)
+        val c = Flyer(2, 12L, x = 10f, y = 120f, vx = 0f, vy = 0f, spin = 0f)
+        val s = PouchState(height = 180f, queue = emptyList(), flyers = listOf(a, b, c))
+        // One swipe straight through a and b, well away from c.
+        val cut = PouchGame.slice(s, 0f, 64f, 100f, 64f, newSwipe = true)
+        assertEquals(listOf(10L, 11L), cut.pouch)
+        assertEquals(2, cut.bestCombo)
+        assertFalse(cut.flyers.first { it.id == 2 }.sliced)
+        // Slicing the same photos again does nothing.
+        assertEquals(cut.pouch, PouchGame.slice(cut, 0f, 64f, 100f, 64f, newSwipe = true).pouch)
     }
 
     @Test
-    fun `hitting junk ends the run, catching a star scores`() {
-        val junk = Thing(0, HopGame.ROO_X, 0f, 10f, false, 0)
-        assertTrue(HopGame.step(HopState(things = listOf(junk), untilSpawn = 99f), 0.01f, Random(1)).over)
-        val star = Thing(1, HopGame.ROO_X, 2f, 7f, true, 0)
-        val after = HopGame.step(HopState(things = listOf(star), untilSpawn = 99f), 0.01f, Random(1))
-        assertFalse(after.over)
-        assertEquals(1, after.stars)
-        assertTrue(after.things.isEmpty())
-        // Junk passes under a Roo high in the air.
-        assertFalse(HopGame.hits(rooY = 30f, th = junk))
+    fun `segment to circle check`() {
+        assertTrue(PouchGame.crosses(0f, 0f, 10f, 0f, 5f, 2f, 3f))
+        assertFalse(PouchGame.crosses(0f, 0f, 10f, 0f, 5f, 5f, 3f))
+        assertFalse(PouchGame.crosses(0f, 0f, 10f, 0f, 20f, 0f, 3f))
     }
 
     @Test
-    fun `a jump clears the tallest junk`() {
-        // Apex = JUMP² / (2·GRAVITY) must be well above the biggest junk (11 units).
-        assertTrue(HopGame.JUMP * HopGame.JUMP / (2 * HopGame.GRAVITY) > 20f)
-    }
-
-    @Test
-    fun `a long run keeps spawning and speeds up`() {
-        var s = HopState()
-        val rng = Random(42)
-        repeat(600) {
-            s = HopGame.step(HopGame.jump(s), 0.016f, rng)
-            if (s.over) s = s.copy(over = false, things = emptyList())
+    fun `round never shows more than three photos at once`() {
+        val rng = Random(3)
+        var s = PouchGame.start(180f, (1L..200L).toList())
+        repeat(1300) {
+            s = PouchGame.step(s, 0.05f, rng)
+            assertTrue(s.flyers.count { !it.sliced } <= PouchGame.MAX_ON_SCREEN)
         }
-        assertTrue(s.speed > HopGame.START_SPEED)
-        assertTrue(s.nextId > 3)
+        assertTrue(s.over)
     }
 }

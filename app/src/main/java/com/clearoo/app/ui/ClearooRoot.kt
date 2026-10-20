@@ -31,19 +31,21 @@ import com.clearoo.app.ui.screens.OnboardingScreen
 import com.clearoo.app.ui.screens.ReviewScreen
 import com.clearoo.app.ui.screens.SettingsScreen
 import com.clearoo.app.ui.screens.ClimbScreen
-import com.clearoo.app.ui.screens.RooHopScreen
+import com.clearoo.app.ui.screens.PouchScreen
 import com.clearoo.app.ui.screens.SwipeScreen
 import com.clearoo.app.ui.screens.UnusedAppsScreen
 import com.clearoo.app.ui.screens.WardrobeScreen
 import com.clearoo.app.ui.theme.Bg
 
-enum class Screen { Loading, Onboarding, Home, Swipe, Review, Celebrate, Settings, Wardrobe, Albums, NewAlbum, Album, UnusedApps, Climb, RooHop }
+enum class Screen { Loading, Onboarding, Home, Swipe, Review, Celebrate, Settings, Wardrobe, Albums, NewAlbum, Album, UnusedApps, Climb, Pouch }
 
 @Composable
 fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> Unit) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     var screen by rememberSaveable { mutableStateOf(Screen.Loading) }
     var albumId by rememberSaveable { mutableLongStateOf(0L) }
+    // The bin can be opened from the cards or from Roo's Pouch; back returns there.
+    var reviewBack by rememberSaveable { mutableStateOf(Screen.Swipe) }
     // Leaving the cards goes back to where they were started from.
     fun swipeParent() = if (vm.deckAlbum != null) Screen.Album else Screen.Home
 
@@ -60,10 +62,10 @@ fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> U
 
     BackHandler(enabled = screen !in setOf(Screen.Loading, Screen.Onboarding, Screen.Home)) {
         screen = when (screen) {
-            Screen.Review -> Screen.Swipe
+            Screen.Review -> reviewBack
             Screen.Swipe -> swipeParent()
             Screen.NewAlbum, Screen.Album -> Screen.Albums
-            Screen.RooHop -> Screen.Climb
+            Screen.Pouch -> Screen.Home
             else -> Screen.Home
         }
     }
@@ -91,15 +93,19 @@ fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> U
                     onAlbums = { screen = Screen.Albums },
                     onUnusedApps = { screen = Screen.UnusedApps },
                     onClimb = { screen = Screen.Climb },
+                    onPouch = { screen = Screen.Pouch },
                 )
                 Screen.Swipe -> SwipeScreen(
                     vm,
                     onBack = { screen = swipeParent() },
-                    onOpenBin = { screen = Screen.Review },
+                    onOpenBin = {
+                        reviewBack = Screen.Swipe
+                        screen = Screen.Review
+                    },
                 )
                 Screen.Review -> ReviewScreen(
                     vm,
-                    onBack = { screen = Screen.Swipe },
+                    onBack = { screen = reviewBack },
                     onDeleted = { screen = Screen.Celebrate },
                 )
                 Screen.Celebrate -> CelebrationScreen(
@@ -111,13 +117,13 @@ fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> U
                 )
                 Screen.Settings -> SettingsScreen(vm, onBack = { screen = Screen.Home })
                 Screen.Wardrobe -> WardrobeScreen(vm, onBack = { screen = Screen.Home })
-                Screen.Climb -> ClimbScreen(vm, onBack = { screen = Screen.Home }, onPlay = { screen = Screen.RooHop })
-                Screen.RooHop -> RooHopScreen(
+                Screen.Climb -> ClimbScreen(vm, onBack = { screen = Screen.Home }, onPlay = { screen = Screen.Pouch })
+                Screen.Pouch -> PouchScreen(
                     vm,
-                    onBack = { screen = Screen.Climb },
-                    onClean = {
-                        vm.startDeck(com.clearoo.app.domain.Deck.RANDOM)
-                        screen = Screen.Swipe
+                    onBack = { screen = Screen.Home },
+                    onReview = {
+                        reviewBack = Screen.Home
+                        screen = Screen.Review
                     },
                 )
                 Screen.UnusedApps -> UnusedAppsScreen(vm, onBack = { screen = Screen.Home })

@@ -12,7 +12,6 @@ import com.clearoo.app.data.AlbumScan
 import com.clearoo.app.data.AppSettings
 import com.clearoo.app.data.AppsRepository
 import com.clearoo.app.data.GallerySummary
-import com.clearoo.app.data.GameStats
 import com.clearoo.app.data.MediaItem
 import com.clearoo.app.data.MediaRepository
 import com.clearoo.app.data.MoveResult
@@ -25,7 +24,6 @@ import com.clearoo.app.domain.Lines
 import com.clearoo.app.domain.Mood
 import com.clearoo.app.domain.MoodRules
 import com.clearoo.app.domain.Outfit
-import com.clearoo.app.domain.PlayRules
 import com.clearoo.app.domain.OutfitRules
 import com.clearoo.app.domain.Progress
 import com.clearoo.app.domain.StreakRules
@@ -68,8 +66,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         prefs.progress.stateIn(viewModelScope, SharingStarted.Eagerly, Progress())
     val settings: StateFlow<AppSettings?> =
         prefs.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
-    val game: StateFlow<GameStats> =
-        prefs.game.stateIn(viewModelScope, SharingStarted.Eagerly, GameStats())
+    val pouchBest: StateFlow<Int> = prefs.pouchBest.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
     val albums: StateFlow<List<Album>> =
         prefs.albums.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -454,22 +451,20 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         storage = Device.storage()
     }
 
-    /** Roo Hop runs left today. */
-    fun runsLeft(): Int {
-        val today = today()
-        val g = game.value
-        return PlayRules.runsLeft(StreakRules.securedToday(progress.value, today), g.runsDay, g.runsUsed, today)
-    }
+    /** Photos for a round of Roo's Pouch: likely junk first, never videos, favourites or kept photos. */
+    suspend fun pouchPhotos(): List<MediaItem> = runCatching {
+        val exclude = prefs.keptIds.first() + swiped + pending.map { it.id }
+        media.pouchBatch(exclude, POUCH_PHOTOS, System.currentTimeMillis())
+    }.getOrDefault(emptyList())
 
-    /** Starts a run if one is left; false if none are. */
-    fun startRun(): Boolean {
-        if (runsLeft() <= 0) return false
-        viewModelScope.launch { prefs.useRun(today()) }
-        return true
-    }
-
-    fun finishRun(score: Int) {
-        viewModelScope.launch { prefs.recordScore(score) }
+    /** The photos sliced in a round go into the bin, to be reviewed before anything is trashed. */
+    fun pouchToBin(items: List<MediaItem>) {
+        if (items.isEmpty()) return
+        val known = pending.map { it.id }.toSet()
+        pending.addAll(items.filter { it.id !in known })
+        swiped += items.map { it.id }
+        saveBin()
+        viewModelScope.launch { prefs.recordPouch(items.size) }
     }
 
     fun completeOnboarding(hour: Int, minute: Int) {
@@ -530,6 +525,7 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         const val MAX_GOAL = 50
+        private const val POUCH_PHOTOS = 60
         private const val BATCH_SIZE = 30
         private const val PREFETCH_AT = 6
         private const val MAX_UNDO = 30

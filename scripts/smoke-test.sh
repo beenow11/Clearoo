@@ -199,21 +199,35 @@ $UI shot 17c-unused-apps
 adb shell input keyevent KEYCODE_BACK; sleep 1
 $UI expect "Today's clean-up"
 
-echo "== Roo's Climb and Roo Hop"
+echo "== Roo's Climb"
 adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 2)) 300; sleep 1
 $UI tap "Roo's Climb"
 $UI expect "hops · next flag"
 $UI shot 17d-climb
-$UI tap "Play Roo Hop"
-$UI tap "Tap to start"
-# The game redraws every frame, so the screen can't be read until the run ends.
-adb shell input tap $((W / 2)) $((H / 2)); sleep 1
-adb shell input tap $((W / 2)) $((H / 2))
-UI_TIMEOUT=90 $UI expect "Back to the climb"   # the run ended (Roo hit some junk)
-$UI shot 17e-roo-hop
-$UI tap "Back to the climb"
-$UI expect "hops · next flag"
 adb shell input keyevent KEYCODE_BACK; sleep 1
+$UI expect "Today's clean-up"
+
+echo "== Roo's Pouch"
+$UI tap "Tap Roo to play"
+UI_TIMEOUT=60 $UI expect "Start slicing"
+$UI shot 17e-pouch-intro
+$UI tap "Start slicing"
+# The game redraws every frame, so the screen can't be read until the round ends. Slash away.
+for _ in $(seq 1 14); do
+  adb shell input swipe $((W / 10)) $((H * 35 / 100)) $((W * 9 / 10)) $((H * 40 / 100)) 150
+  adb shell input swipe $((W * 9 / 10)) $((H * 25 / 100)) $((W / 10)) $((H * 50 / 100)) 150
+  sleep 2
+done
+UI_TIMEOUT=120 $UI expect "Roo's pouch:"      # the round is over
+$UI shot 17f-pouch-over
+if [ -n "$(python3 scripts/ui.py label "Review & move to trash")" ]; then
+  $UI tap "Review & move to trash"
+  $UI expect "The bin"
+  $UI shot 17g-pouch-bin
+  adb shell input keyevent KEYCODE_BACK; sleep 1   # back to Home, the bin is kept
+else
+  $UI tap "Done"
+fi
 $UI expect "Today's clean-up"
 
 echo "== Phone storage full"
