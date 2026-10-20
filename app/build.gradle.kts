@@ -18,7 +18,7 @@ android {
         // Play rejects an upload whose versionCode isn't higher than the last one. The release
         // workflow sets VERSION_CODE from its run number, so it always goes up on its own.
         versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 4
-        versionName = "1.0.0"
+        versionName = "1.1.0"
     }
 
     signingConfigs {

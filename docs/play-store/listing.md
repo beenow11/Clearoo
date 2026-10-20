@@ -68,3 +68,20 @@ Category: **Utility, Productivity, Communication or Other**. Answer **No** to ev
 
 ## Ads
 No ads.
+
+## Release notes: 1.1.0
+```
+<en-US>
+New in Clearoo 1.1 🦘
+• Play with Roo! Tap Roo for games: slice photos in Roo's Pouch, unscramble your own photos in Roo's Puzzle
+• Roo's Climb: every photo you delete is a hop up the mountain, through 9 worlds to Roo's home
+• Unused apps: find apps you haven't opened in weeks and uninstall them
+• Long-press a photo while swiping to zoom in
+• You now get a popup when Roo unlocks a new outfit
+</en-US>
+```
+
+## Permissions added in 1.1
+- **Usage access (PACKAGE_USAGE_STATS):** optional, asked only when the user opens Unused apps. Used on the device to show when each app was last opened. Never leaves the phone.
+- **REQUEST_DELETE_PACKAGES:** opens Android's own uninstall prompt for an app the user picks. The user confirms every uninstall.
+- Data safety answers are unchanged: nothing is collected or shared.
