@@ -5,7 +5,11 @@ roolabs.support+clearoo@gmail.com
 (Studio inbox for all Roo Labs apps; the +clearoo part lets Gmail label Clearoo mail automatically.)
 
 ## App name (max 30 characters)
-Clearoo: Swipe Gallery Cleaner
+Clearoo: Declutter with Roo
+
+(Changed from "Clearoo: Swipe Gallery Cleaner", which Google flagged under the Impersonation
+policy because another app is called exactly "Swipe Gallery Cleaner". Keep the title unique:
+avoid other apps' exact names such as "Swipe Gallery Cleaner" or "Photo Cleaner".)
 
 ## Short description (max 80 characters)
 Swipe left to delete, right to keep. Free up space a few photos a day 🦘
