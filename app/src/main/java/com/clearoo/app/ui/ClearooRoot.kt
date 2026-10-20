@@ -30,12 +30,14 @@ import com.clearoo.app.ui.screens.HomeScreen
 import com.clearoo.app.ui.screens.OnboardingScreen
 import com.clearoo.app.ui.screens.ReviewScreen
 import com.clearoo.app.ui.screens.SettingsScreen
+import com.clearoo.app.ui.screens.ClimbScreen
+import com.clearoo.app.ui.screens.RooHopScreen
 import com.clearoo.app.ui.screens.SwipeScreen
 import com.clearoo.app.ui.screens.UnusedAppsScreen
 import com.clearoo.app.ui.screens.WardrobeScreen
 import com.clearoo.app.ui.theme.Bg
 
-enum class Screen { Loading, Onboarding, Home, Swipe, Review, Celebrate, Settings, Wardrobe, Albums, NewAlbum, Album, UnusedApps }
+enum class Screen { Loading, Onboarding, Home, Swipe, Review, Celebrate, Settings, Wardrobe, Albums, NewAlbum, Album, UnusedApps, Climb, RooHop }
 
 @Composable
 fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> Unit) {
@@ -61,6 +63,7 @@ fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> U
             Screen.Review -> Screen.Swipe
             Screen.Swipe -> swipeParent()
             Screen.NewAlbum, Screen.Album -> Screen.Albums
+            Screen.RooHop -> Screen.Climb
             else -> Screen.Home
         }
     }
@@ -87,6 +90,7 @@ fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> U
                     onWardrobe = { screen = Screen.Wardrobe },
                     onAlbums = { screen = Screen.Albums },
                     onUnusedApps = { screen = Screen.UnusedApps },
+                    onClimb = { screen = Screen.Climb },
                 )
                 Screen.Swipe -> SwipeScreen(
                     vm,
@@ -103,9 +107,19 @@ fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> U
                     onKeepGoing = { screen = Screen.Swipe },
                     onDone = { screen = Screen.Home },
                     onWardrobe = { screen = Screen.Wardrobe },
+                    onClimb = { screen = Screen.Climb },
                 )
                 Screen.Settings -> SettingsScreen(vm, onBack = { screen = Screen.Home })
                 Screen.Wardrobe -> WardrobeScreen(vm, onBack = { screen = Screen.Home })
+                Screen.Climb -> ClimbScreen(vm, onBack = { screen = Screen.Home }, onPlay = { screen = Screen.RooHop })
+                Screen.RooHop -> RooHopScreen(
+                    vm,
+                    onBack = { screen = Screen.Climb },
+                    onClean = {
+                        vm.startDeck(com.clearoo.app.domain.Deck.RANDOM)
+                        screen = Screen.Swipe
+                    },
+                )
                 Screen.UnusedApps -> UnusedAppsScreen(vm, onBack = { screen = Screen.Home })
                 Screen.Albums -> AlbumsScreen(
                     vm,

@@ -12,6 +12,7 @@ import com.clearoo.app.data.AlbumScan
 import com.clearoo.app.data.AppSettings
 import com.clearoo.app.data.AppsRepository
 import com.clearoo.app.data.GallerySummary
+import com.clearoo.app.data.GameStats
 import com.clearoo.app.data.MediaItem
 import com.clearoo.app.data.MediaRepository
 import com.clearoo.app.data.MoveResult
@@ -24,6 +25,7 @@ import com.clearoo.app.domain.Lines
 import com.clearoo.app.domain.Mood
 import com.clearoo.app.domain.MoodRules
 import com.clearoo.app.domain.Outfit
+import com.clearoo.app.domain.PlayRules
 import com.clearoo.app.domain.OutfitRules
 import com.clearoo.app.domain.Progress
 import com.clearoo.app.domain.StreakRules
@@ -66,6 +68,8 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         prefs.progress.stateIn(viewModelScope, SharingStarted.Eagerly, Progress())
     val settings: StateFlow<AppSettings?> =
         prefs.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val game: StateFlow<GameStats> =
+        prefs.game.stateIn(viewModelScope, SharingStarted.Eagerly, GameStats())
     val albums: StateFlow<List<Album>> =
         prefs.albums.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -448,6 +452,24 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         appsFreed += app.sizeBytes
         installedApps = installedApps?.filter { it.packageName != app.packageName }
         storage = Device.storage()
+    }
+
+    /** Roo Hop runs left today. */
+    fun runsLeft(): Int {
+        val today = today()
+        val g = game.value
+        return PlayRules.runsLeft(StreakRules.securedToday(progress.value, today), g.runsDay, g.runsUsed, today)
+    }
+
+    /** Starts a run if one is left; false if none are. */
+    fun startRun(): Boolean {
+        if (runsLeft() <= 0) return false
+        viewModelScope.launch { prefs.useRun(today()) }
+        return true
+    }
+
+    fun finishRun(score: Int) {
+        viewModelScope.launch { prefs.recordScore(score) }
     }
 
     fun completeOnboarding(hour: Int, minute: Int) {

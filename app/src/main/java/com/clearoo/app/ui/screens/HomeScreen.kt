@@ -77,6 +77,7 @@ fun HomeScreen(
     onWardrobe: () -> Unit,
     onAlbums: () -> Unit,
     onUnusedApps: () -> Unit,
+    onClimb: () -> Unit,
 ) {
     val context = LocalContext.current
     val progress by vm.progress.collectAsStateWithLifecycle()
@@ -169,6 +170,8 @@ fun HomeScreen(
         FeatureTile("🗂️", "Albums", "Clean up a trip: blurry shots & duplicates", null, onAlbums)
         Spacer(Modifier.height(10.dp))
         FeatureTile("📱", "Unused apps", "Apps you haven't opened in a month", "New", onUnusedApps)
+        Spacer(Modifier.height(10.dp))
+        FeatureTile("🏔️", "Roo's Climb", "${progress.totalDeleted} hops up · play Roo Hop", "New", onClimb)
         Spacer(Modifier.height(24.dp))
         SmartDecks(vm.deckSummaries, onStart)
         Spacer(Modifier.height(24.dp))

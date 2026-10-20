@@ -199,6 +199,23 @@ $UI shot 17c-unused-apps
 adb shell input keyevent KEYCODE_BACK; sleep 1
 $UI expect "Today's clean-up"
 
+echo "== Roo's Climb and Roo Hop"
+adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 2)) 300; sleep 1
+$UI tap "Roo's Climb"
+$UI expect "hops · next flag"
+$UI shot 17d-climb
+$UI tap "Play Roo Hop"
+$UI tap "Tap to start"
+# The game redraws every frame, so the screen can't be read until the run ends.
+adb shell input tap $((W / 2)) $((H / 2)); sleep 1
+adb shell input tap $((W / 2)) $((H / 2))
+UI_TIMEOUT=90 $UI expect "Back to the climb"   # the run ended (Roo hit some junk)
+$UI shot 17e-roo-hop
+$UI tap "Back to the climb"
+$UI expect "hops · next flag"
+adb shell input keyevent KEYCODE_BACK; sleep 1
+$UI expect "Today's clean-up"
+
 echo "== Phone storage full"
 # Fill the data partition as far as apps can go (Android keeps a reserve for the system),
 # keeping a small file back to free later so the delete itself has room.

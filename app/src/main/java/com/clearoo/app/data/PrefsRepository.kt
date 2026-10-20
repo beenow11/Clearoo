@@ -94,6 +94,9 @@ private object Stores {
     fun device(context: Context): SafeStore = device ?: SafeStore(context.deviceStore).also { device = it }
 }
 
+/** Roo Hop: runs used on [runsDay] and the best score ever. */
+data class GameStats(val runsDay: Long = NO_DAY, val runsUsed: Int = 0, val best: Int = 0)
+
 data class AppSettings(
     val reminderHour: Int = 19,
     val reminderMinute: Int = 30,
@@ -126,6 +129,9 @@ class PrefsRepository(context: Context) {
         val PERMANENT_DELETE = booleanPreferencesKey("permanent_delete")
         val ONBOARDED = booleanPreferencesKey("onboarded")
         val OUTFIT = stringPreferencesKey("outfit")
+        val GAME_DAY = longPreferencesKey("game_day")
+        val GAME_RUNS = intPreferencesKey("game_runs")
+        val GAME_BEST = intPreferencesKey("game_best")
     }
 
     /** Keys in the device-only store. */
@@ -148,6 +154,24 @@ class PrefsRepository(context: Context) {
             outfit = p[Keys.OUTFIT]?.let { name -> Outfit.entries.firstOrNull { it.name == name } } ?: defaults.outfit,
         )
     }.distinctUntilChanged()
+
+    val game: Flow<GameStats> = store.data.map { p ->
+        GameStats(p[Keys.GAME_DAY] ?: NO_DAY, p[Keys.GAME_RUNS] ?: 0, p[Keys.GAME_BEST] ?: 0)
+    }.distinctUntilChanged()
+
+    /** Counts one Roo Hop run against [today]'s allowance. */
+    suspend fun useRun(today: Long) {
+        store.edit { p ->
+            val used = if (p[Keys.GAME_DAY] == today) p[Keys.GAME_RUNS] ?: 0 else 0
+            p[Keys.GAME_DAY] = today
+            p[Keys.GAME_RUNS] = used + 1
+        }
+    }
+
+    /** Keeps the higher of the stored best and [score]. */
+    suspend fun recordScore(score: Int) {
+        store.edit { p -> if (score > (p[Keys.GAME_BEST] ?: 0)) p[Keys.GAME_BEST] = score }
+    }
 
     val keptIds: Flow<Set<Long>> = device.data.map { p -> p[DeviceKeys.KEPT_IDS].toIds() }
 

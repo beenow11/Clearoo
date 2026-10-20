@@ -30,6 +30,8 @@ import com.clearoo.app.ui.components.Pill
 import com.clearoo.app.ui.components.SpeechBubble
 import com.clearoo.app.ui.components.pressable
 import com.clearoo.app.ui.theme.Violet
+import com.clearoo.app.ui.theme.Surface2
+import com.clearoo.app.domain.ClimbRules
 import com.clearoo.app.ui.components.gradientTint
 import com.clearoo.app.ui.theme.BrandBrush
 import com.clearoo.app.ui.theme.Flame
@@ -38,7 +40,13 @@ import com.clearoo.app.ui.theme.TextLo
 import com.clearoo.app.util.Fmt
 
 @Composable
-fun CelebrationScreen(vm: ClearooViewModel, onKeepGoing: () -> Unit, onDone: () -> Unit, onWardrobe: () -> Unit) {
+fun CelebrationScreen(
+    vm: ClearooViewModel,
+    onKeepGoing: () -> Unit,
+    onDone: () -> Unit,
+    onWardrobe: () -> Unit,
+    onClimb: () -> Unit,
+) {
     val result = vm.lastResult
     val pop = remember { Animatable(0.4f) }
     LaunchedEffect(result) { pop.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 260f)) }
@@ -85,6 +93,21 @@ fun CelebrationScreen(vm: ClearooViewModel, onKeepGoing: () -> Unit, onDone: () 
                     Spacer(Modifier.height(8.dp))
                     Text("🔥 ${result.streak}-day streak", style = MaterialTheme.typography.titleLarge, color = Flame)
                 }
+            }
+            if (result != null) {
+                // Every delete is a hop on Roo's Climb; say so, and mark any flag just reached.
+                val after = vm.progress.value.totalDeleted
+                val flags = ClimbRules.milestonesPassed(after - result.count, after)
+                Spacer(Modifier.height(16.dp))
+                Pill(
+                    if (flags.isNotEmpty()) {
+                        "🚩 New flag on Roo's Climb! ${ClimbRules.reward(flags.last())}"
+                    } else {
+                        "🏔️ Roo climbed ${result.count} ${if (result.count == 1) "hop" else "hops"}"
+                    },
+                    Surface2,
+                    Modifier.pressable(onClick = onClimb),
+                )
             }
             if (unlocked != null) {
                 Spacer(Modifier.height(16.dp))
