@@ -50,12 +50,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -94,7 +97,7 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 @Composable
-private fun TopBar(title: String, onBack: () -> Unit, trailing: @Composable () -> Unit = {}) {
+internal fun GameTopBar(title: String, onBack: () -> Unit, trailing: @Composable () -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextHi)
@@ -119,7 +122,7 @@ fun ClimbScreen(vm: ClearooViewModel, onBack: () -> Unit, onPlay: () -> Unit) {
     val next = ClimbRules.nextMilestone(hops)
 
     Column(Modifier.fillMaxSize().systemBarsPadding()) {
-        TopBar("Roo's Climb", onBack)
+        GameTopBar("Roo's Climb", onBack)
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -131,7 +134,7 @@ fun ClimbScreen(vm: ClearooViewModel, onBack: () -> Unit, onPlay: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         ClimbMap(hops, Modifier.weight(1f).fillMaxWidth())
         Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-            GradientButton("🎮 Play Roo's Pouch", onPlay)
+            GradientButton("🎮 Play a game", onPlay)
             Spacer(Modifier.height(6.dp))
             Text(
                 "Every photo you delete is one hop up the mountain.",
@@ -144,102 +147,145 @@ fun ClimbScreen(vm: ClearooViewModel, onBack: () -> Unit, onPlay: () -> Unit) {
     }
 }
 
+/** The map is drawn in slices so only what's on screen is painted, however high Roo has climbed. */
+private const val DOTS_PER_SLICE = 10
+private const val HOPS_PER_SLICE = DOTS_PER_SLICE * HOPS_PER_DOT
+
 @Composable
 private fun ClimbMap(hops: Int, modifier: Modifier) {
-    // Show the path to just past the next world (or 100 hops above Roo in the last world).
+    // Show the path to just past the next world (or 100 hops above Roo once at the top).
     val top = (ClimbRules.nextWorld(hops)?.startHop ?: (hops + 100)).let { (it / ClimbRules.MILESTONE_EVERY + 1) * ClimbRules.MILESTONE_EVERY }
-    val dots = top / HOPS_PER_DOT + 1
+    val slices = top / HOPS_PER_SLICE + 1
+    val rooSlice = hops / HOPS_PER_SLICE
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
     val density = LocalDensity.current
-    val scroll = rememberScrollState()
-    val mapHeight = DOT_GAP * (dots + 1)
 
     BoxWithConstraints(modifier) {
         val width = maxWidth
-        val viewport = maxHeight
-        fun yOf(i: Float) = mapHeight - DOT_GAP * (i + 0.5f)
-        fun xOf(i: Float) = width / 2 + width * 0.26f * sin(i * 0.55f)
-        val rooAt = hops.toFloat() / HOPS_PER_DOT
-
-        LaunchedEffect(hops, viewport) {
-            val target = with(density) { (yOf(rooAt) - viewport / 2).toPx() }.toInt()
-            scroll.scrollTo(target.coerceAtLeast(0))
+        val sliceHeight = DOT_GAP * DOTS_PER_SLICE
+        // Centre Roo on screen when the map opens.
+        LaunchedEffect(hops) {
+            with(density) {
+                val view = maxHeight.toPx()
+                val slicePx = sliceHeight.toPx()
+                val fromBottom = DOT_GAP.toPx() * ((hops % HOPS_PER_SLICE) / HOPS_PER_DOT.toFloat() + 0.5f)
+                if (fromBottom >= view / 2 || rooSlice == 0) {
+                    list.scrollToItem(rooSlice, (fromBottom - view / 2).toInt().coerceAtLeast(0))
+                } else {
+                    list.scrollToItem(rooSlice - 1, (slicePx + fromBottom - view / 2).toInt().coerceAtLeast(0))
+                }
+            }
         }
-
-        Box(Modifier.fillMaxSize().verticalScroll(scroll)) {
-            Box(Modifier.fillMaxWidth().height(mapHeight)) {
-                Canvas(Modifier.fillMaxSize()) {
-                    // Scenery for each world, then a soft blend where two worlds meet.
-                    ClimbRules.WORLDS.forEachIndexed { w, info ->
-                        val endHop = ClimbRules.WORLDS.getOrNull(w + 1)?.startHop
-                        val bottom = yOf(info.startHop.toFloat() / HOPS_PER_DOT - 0.5f).toPx().coerceAtMost(size.height)
-                        val upper = if (endHop == null) 0f else yOf(endHop.toFloat() / HOPS_PER_DOT - 0.5f).toPx().coerceAtLeast(0f)
-                        if (bottom > upper) drawWorld(w, upper, bottom)
-                    }
-                    ClimbRules.WORLDS.drop(1).forEach { info ->
-                        val y = yOf(info.startHop.toFloat() / HOPS_PER_DOT - 0.5f).toPx()
-                        if (y in 0f..size.height) {
-                            drawRect(
-                                Brush.verticalGradient(listOf(Color.Transparent, Color(0x55000000), Color.Transparent), startY = y - 60.dp.toPx(), endY = y + 60.dp.toPx()),
-                                Offset(0f, y - 60.dp.toPx()), Size(size.width, 120.dp.toPx()),
-                            )
-                        }
-                    }
-                    // A dirt trail, lit up to where Roo is, with a stepping stone every 5 hops.
-                    val all = Path()
-                    val done = Path()
-                    for (i in 0 until dots) {
-                        val p = Offset(xOf(i.toFloat()).toPx(), yOf(i.toFloat()).toPx())
-                        if (i == 0) all.moveTo(p.x, p.y) else all.lineTo(p.x, p.y)
-                        if (i * HOPS_PER_DOT <= hops) {
-                            if (i == 0) done.moveTo(p.x, p.y) else done.lineTo(p.x, p.y)
-                        }
-                    }
-                    drawPath(all, Color(0x55000000), style = Stroke(22.dp.toPx(), cap = StrokeCap.Round))
-                    drawPath(all, Color(0x33FFF3E0), style = Stroke(14.dp.toPx(), cap = StrokeCap.Round))
-                    drawPath(done, Brush.verticalGradient(listOf(Gold, Flame, Coral)), style = Stroke(10.dp.toPx(), cap = StrokeCap.Round))
-                    for (i in 0 until dots) {
-                        if (i > 0 && (i * HOPS_PER_DOT) % ClimbRules.MILESTONE_EVERY == 0) continue
-                        val c = Offset(xOf(i.toFloat()).toPx(), yOf(i.toFloat()).toPx())
-                        val reached = i * HOPS_PER_DOT <= hops
-                        drawOval(Color(0x66000000), Offset(c.x - 13.dp.toPx(), c.y - 6.dp.toPx()), Size(26.dp.toPx(), 16.dp.toPx()))
-                        drawOval(if (reached) Color(0xFFFFD9A8) else Color(0xFFB9B0C9), Offset(c.x - 12.dp.toPx(), c.y - 8.dp.toPx()), Size(24.dp.toPx(), 14.dp.toPx()))
-                    }
-                }
-                // Flags every 25 hops, with their sticker once reached.
-                for (m in ClimbRules.MILESTONE_EVERY..top step ClimbRules.MILESTONE_EVERY) {
-                    val i = (m / HOPS_PER_DOT).toFloat()
-                    val reached = hops >= m
-                    Box(
-                        Modifier
-                            .offset(xOf(i) - 24.dp, yOf(i) - 24.dp)
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(if (reached) Surface1 else Color(0xCC2A2140))
-                            .border(3.dp, if (reached) Gold else Color.White.copy(alpha = 0.35f), CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(if (reached) ClimbRules.reward(m) else "🚩", style = MaterialTheme.typography.titleMedium)
-                    }
-                }
-                ClimbRules.WORLDS.filter { it.startHop <= top }.forEach { w ->
-                    val i = w.startHop.toFloat() / HOPS_PER_DOT
-                    Pill("${w.emoji} ${w.name}", Color(0x99000000), Modifier.offset(12.dp, yOf(i) - 10.dp))
-                }
-                Mascot(Mood.HAPPY, Modifier.offset(xOf(rooAt) - 40.dp, yOf(rooAt) - 76.dp), size = 80.dp)
+        androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxSize(), state = list, reverseLayout = true) {
+            items(slices) { slice ->
+                ClimbSlice(slice, hops, top, width, sliceHeight, Modifier.zIndex(if (slice == rooSlice) 1f else 0f))
             }
         }
     }
 }
 
+/** One slice of the map: [DOTS_PER_SLICE] dots of the trail over its world's scenery. */
+@Composable
+private fun ClimbSlice(slice: Int, hops: Int, top: Int, width: androidx.compose.ui.unit.Dp, height: androidx.compose.ui.unit.Dp, modifier: Modifier) {
+    val firstHop = slice * HOPS_PER_SLICE
+    val worldIndex = ClimbRules.WORLDS.indexOfLast { firstHop >= it.startHop }
+    val world = ClimbRules.WORLDS[worldIndex]
+    val firstDot = slice * DOTS_PER_SLICE
+    val lastDot = (top / HOPS_PER_DOT).coerceAtLeast(firstDot)
+    fun xOf(i: Int) = width / 2 + width * 0.26f * sin(i * 0.55f)
+    fun yOf(i: Int) = height - DOT_GAP * (i - firstDot + 0.5f)
+
+    Box(modifier.fillMaxWidth().height(height)) {
+        Canvas(Modifier.fillMaxSize()) {
+            clipRect {
+                drawWorld(worldIndex, 0f, size.height, seed = slice)
+                // Darken the seam where a new world begins.
+                if (firstHop == world.startHop && firstHop > 0) {
+                    drawRect(
+                        Brush.verticalGradient(listOf(Color.Transparent, Color(0x66000000)), startY = size.height - 70.dp.toPx(), endY = size.height),
+                        Offset(0f, size.height - 70.dp.toPx()), Size(size.width, 70.dp.toPx()),
+                    )
+                }
+                // The trail runs one dot past each edge so neighbouring slices join up.
+                val from = (firstDot - 1).coerceAtLeast(0)
+                val to = minOf(firstDot + DOTS_PER_SLICE, lastDot)
+                if (to > from) {
+                    val all = Path()
+                    val done = Path()
+                    var doneStarted = false
+                    for (i in from..to) {
+                        val p = Offset(xOf(i).toPx(), yOf(i).toPx())
+                        if (i == from) all.moveTo(p.x, p.y) else all.lineTo(p.x, p.y)
+                        if (i * HOPS_PER_DOT <= hops) {
+                            if (!doneStarted) {
+                                done.moveTo(p.x, p.y)
+                                doneStarted = true
+                            } else {
+                                done.lineTo(p.x, p.y)
+                            }
+                        }
+                    }
+                    drawPath(all, Color(0x55000000), style = Stroke(22.dp.toPx(), cap = StrokeCap.Round))
+                    drawPath(all, Color(0x33FFF3E0), style = Stroke(14.dp.toPx(), cap = StrokeCap.Round))
+                    drawPath(done, Brush.verticalGradient(listOf(Gold, Flame, Coral)), style = Stroke(10.dp.toPx(), cap = StrokeCap.Round))
+                }
+                for (i in firstDot until minOf(firstDot + DOTS_PER_SLICE, lastDot + 1)) {
+                    if (i > 0 && (i * HOPS_PER_DOT) % ClimbRules.MILESTONE_EVERY == 0) continue
+                    val c = Offset(xOf(i).toPx(), yOf(i).toPx())
+                    val reached = i * HOPS_PER_DOT <= hops
+                    drawOval(Color(0x66000000), Offset(c.x - 13.dp.toPx(), c.y - 6.dp.toPx()), Size(26.dp.toPx(), 16.dp.toPx()))
+                    drawOval(if (reached) Color(0xFFFFD9A8) else Color(0xFFB9B0C9), Offset(c.x - 12.dp.toPx(), c.y - 8.dp.toPx()), Size(24.dp.toPx(), 14.dp.toPx()))
+                }
+            }
+        }
+        // Flags every 25 hops, with their sticker once reached; Roo's home at the summit.
+        for (i in firstDot until minOf(firstDot + DOTS_PER_SLICE, lastDot + 1)) {
+            val hop = i * HOPS_PER_DOT
+            if (hop == 0 || hop % ClimbRules.MILESTONE_EVERY != 0) continue
+            val reached = hops >= hop
+            if (hop == ClimbRules.SUMMIT) {
+                Column(
+                    Modifier.offset(xOf(i) - 60.dp, yOf(i) - 64.dp).size(120.dp, 96.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text("🏡", style = MaterialTheme.typography.displaySmall)
+                    Pill(if (reached) "Home! 🎉" else "Roo's home", if (reached) Gold.copy(alpha = 0.9f) else Color(0x99000000))
+                }
+                continue
+            }
+            Box(
+                Modifier
+                    .offset(xOf(i) - 24.dp, yOf(i) - 24.dp)
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(if (reached) Surface1 else Color(0xCC2A2140))
+                    .border(3.dp, if (reached) Gold else Color.White.copy(alpha = 0.35f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(if (reached) ClimbRules.reward(hop) else "🚩", style = MaterialTheme.typography.titleMedium)
+            }
+        }
+        if (firstHop == world.startHop) {
+            Pill("${world.emoji} ${world.name}", Color(0x99000000), Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 6.dp))
+        }
+        val rooDot = hops / HOPS_PER_DOT.toFloat()
+        if (hops / HOPS_PER_SLICE == slice) {
+            val x = width / 2 + width * 0.26f * sin(rooDot * 0.55f)
+            val y = height - DOT_GAP * (rooDot - firstDot + 0.5f)
+            Mascot(Mood.HAPPY, Modifier.offset(x - 40.dp, y - 76.dp), size = 80.dp)
+        }
+    }
+}
+
 /** Paints one world's scenery between [top] and [bottom]. Seeded, so it looks the same every time. */
-private fun DrawScope.drawWorld(world: Int, top: Float, bottom: Float) {
+private fun DrawScope.drawWorld(world: Int, top: Float, bottom: Float, seed: Int) {
     val w = size.width
     val h = bottom - top
-    val rng = Random(world * 7919 + 17)
+    val rng = Random(world * 7919 + seed * 31 + 17)
     val u = 1.dp.toPx()
     // Items stay near the sides so the trail in the middle stays clear.
     fun sideX(): Float = if (rng.nextBoolean()) rng.nextFloat() * w * 0.2f else w * 0.8f + rng.nextFloat() * w * 0.2f
-    fun anyY(): Float = top + rng.nextFloat() * h
+    fun anyY(): Float = top + 40 * 1.dp.toPx() + rng.nextFloat() * (h - 60 * 1.dp.toPx())
     val count = (h / (70 * u)).toInt().coerceAtLeast(4)
     when (world) {
         0 -> { // Meadow: sky to grass, clouds, hills, trees and flowers.
@@ -322,7 +368,7 @@ private fun DrawScope.drawWorld(world: Int, top: Float, bottom: Float) {
             }
             repeat(count * 4) { drawCircle(Color(0xCCFFFFFF), (1.5f + rng.nextFloat() * 2) * u, Offset(rng.nextFloat() * w, anyY())) }
         }
-        else -> { // Space: deep sky, stars, ringed planets and a moon.
+        3 -> { // Space: deep sky, stars, ringed planets and a moon.
             drawRect(Brush.verticalGradient(listOf(Color(0xFF07061A), Color(0xFF1A1340), Color(0xFF2B1D5C)), startY = top, endY = bottom), Offset(0f, top), Size(w, h))
             repeat(count * 8) {
                 drawCircle(Color.White.copy(alpha = 0.3f + rng.nextFloat() * 0.6f), (0.8f + rng.nextFloat() * 1.6f) * u, Offset(rng.nextFloat() * w, anyY()))
@@ -342,6 +388,143 @@ private fun DrawScope.drawWorld(world: Int, top: Float, bottom: Float) {
                 val s = Offset(rng.nextFloat() * w, anyY())
                 drawLine(Brush.horizontalGradient(listOf(Color.Transparent, Color.White), startX = s.x, endX = s.x + 50 * u), s, Offset(s.x + 50 * u, s.y + 18 * u), 2 * u)
             }
+        }
+        4 -> { // Ocean: deep water, waves, fish, bubbles, seaweed and coral.
+            drawRect(Brush.verticalGradient(listOf(Color(0xFF0E4C7A), Color(0xFF0B3A63), Color(0xFF082946)), startY = top, endY = bottom), Offset(0f, top), Size(w, h))
+            repeat(count / 2) {
+                val y = anyY()
+                val wave = Path().apply {
+                    moveTo(0f, y)
+                    var x = 0f
+                    while (x < w) {
+                        quadraticTo(x + 20 * u, y - 8 * u, x + 40 * u, y)
+                        x += 40 * u
+                    }
+                }
+                drawPath(wave, Color(0x2290E0FF), style = Stroke(2 * u))
+            }
+            repeat(count) {
+                val x = sideX()
+                val y = anyY()
+                when (rng.nextInt(3)) {
+                    0 -> { // A fish.
+                        val col = listOf(Color(0xFFFFB36B), Color(0xFFFF8FA8), Color(0xFFFFD84D), Color(0xFF7FE0C2)).random(rng)
+                        drawOval(col, Offset(x - 12 * u, y - 7 * u), Size(24 * u, 14 * u))
+                        drawPath(Path().apply { moveTo(x + 10 * u, y); lineTo(x + 20 * u, y - 7 * u); lineTo(x + 20 * u, y + 7 * u); close() }, col)
+                        drawCircle(Color(0xFF130F1E), 1.6f * u, Offset(x - 6 * u, y - 2 * u))
+                    }
+                    1 -> { // Seaweed.
+                        val sw = Path().apply {
+                            moveTo(x, y)
+                            quadraticTo(x - 8 * u, y - 14 * u, x, y - 28 * u)
+                            quadraticTo(x + 8 * u, y - 42 * u, x, y - 54 * u)
+                        }
+                        drawPath(sw, Color(0xFF2E9E6B), style = Stroke(5 * u, cap = StrokeCap.Round))
+                    }
+                    else -> { // Coral.
+                        val col = Color(0xFFFF6F8E)
+                        drawLine(col, Offset(x, y), Offset(x, y - 26 * u), 5 * u, StrokeCap.Round)
+                        drawLine(col, Offset(x, y - 12 * u), Offset(x - 10 * u, y - 24 * u), 4 * u, StrokeCap.Round)
+                        drawLine(col, Offset(x, y - 16 * u), Offset(x + 10 * u, y - 28 * u), 4 * u, StrokeCap.Round)
+                    }
+                }
+            }
+            repeat(count * 2) { drawCircle(Color(0x66BFEFFF), (2 + rng.nextFloat() * 4) * u, Offset(rng.nextFloat() * w, anyY()), style = Stroke(1.2f * u)) }
+        }
+        5 -> { // Volcano: smoky red sky, volcanoes, lava rivers and embers.
+            drawRect(Brush.verticalGradient(listOf(Color(0xFF2A0F12), Color(0xFF5A1A14), Color(0xFF3A1210)), startY = top, endY = bottom), Offset(0f, top), Size(w, h))
+            repeat((count / 4).coerceAtLeast(2)) {
+                val x = sideX()
+                val y = anyY()
+                val s = (40 + rng.nextFloat() * 30) * u
+                drawPath(Path().apply { moveTo(x - s, y); lineTo(x - s * 0.25f, y - s); lineTo(x + s * 0.25f, y - s); lineTo(x + s, y); close() }, Color(0xFF3B2622))
+                drawPath(Path().apply { moveTo(x - s * 0.25f, y - s); lineTo(x - s * 0.1f, y - s * 0.55f); lineTo(x + s * 0.05f, y - s * 0.7f); lineTo(x + s * 0.25f, y - s); close() }, Color(0xFFFF6A2B))
+                drawCircle(Color(0x55776A6A), s * 0.35f, Offset(x - s * 0.1f, y - s * 1.3f))
+                drawCircle(Color(0x44776A6A), s * 0.45f, Offset(x + s * 0.2f, y - s * 1.7f))
+            }
+            repeat(count / 3) {
+                val y = anyY()
+                val river = Path().apply {
+                    moveTo(0f, y)
+                    cubicTo(w * 0.3f, y - 30 * u, w * 0.6f, y + 30 * u, w, y - 10 * u)
+                }
+                drawPath(river, Color(0x88FF7A2B), style = Stroke(6 * u, cap = StrokeCap.Round))
+            }
+            repeat(count * 3) { drawCircle(Color(0xCCFFB36B), (1 + rng.nextFloat() * 2) * u, Offset(rng.nextFloat() * w, anyY())) }
+        }
+        6 -> { // Candy land: pink sky, lollipops, candy canes, gumdrops and sprinkles.
+            drawRect(Brush.verticalGradient(listOf(Color(0xFFFFB3D9), Color(0xFFFF8FC7), Color(0xFFE77AB8)), startY = top, endY = bottom), Offset(0f, top), Size(w, h))
+            repeat(count) {
+                val x = sideX()
+                val y = anyY()
+                when (rng.nextInt(3)) {
+                    0 -> { // A lollipop.
+                        drawLine(Color.White, Offset(x, y), Offset(x, y - 30 * u), 3 * u)
+                        drawCircle(listOf(Color(0xFFFF5F6D), Color(0xFF8E7CFF), Color(0xFF4FC3F7)).random(rng), 13 * u, Offset(x, y - 36 * u))
+                        drawCircle(Color.White, 13 * u, Offset(x, y - 36 * u), style = Stroke(3 * u))
+                    }
+                    1 -> { // A candy cane.
+                        val cane = Path().apply {
+                            moveTo(x, y)
+                            lineTo(x, y - 30 * u)
+                            quadraticTo(x, y - 42 * u, x + 10 * u, y - 42 * u)
+                            quadraticTo(x + 18 * u, y - 42 * u, x + 18 * u, y - 32 * u)
+                        }
+                        drawPath(cane, Color.White, style = Stroke(6 * u, cap = StrokeCap.Round))
+                        drawPath(cane, Color(0xFFFF4D6D), style = Stroke(6 * u, pathEffect = PathEffect.dashPathEffect(floatArrayOf(5 * u, 5 * u))))
+                    }
+                    else -> { // A gumdrop.
+                        val col = listOf(Color(0xFF2EE59D), Color(0xFFFFD84D), Color(0xFFFF8A3D)).random(rng)
+                        drawArc(col, 180f, 180f, true, Offset(x - 12 * u, y - 24 * u), Size(24 * u, 24 * u))
+                        drawRect(col, Offset(x - 12 * u, y - 12 * u), Size(24 * u, 8 * u))
+                    }
+                }
+            }
+            repeat(count * 3) {
+                val c = Offset(rng.nextFloat() * w, anyY())
+                val a = rng.nextFloat() * 6.28f
+                drawLine(listOf(Color.White, Color(0xFF8E7CFF), Color(0xFFFFD84D), Color(0xFF4FC3F7)).random(rng), c, Offset(c.x + cos(a) * 6 * u, c.y + sin(a) * 6 * u), 2.5f * u, StrokeCap.Round)
+            }
+        }
+        7 -> { // Rainbow sky: soft clouds, rainbows and sparkles.
+            drawRect(Brush.verticalGradient(listOf(Color(0xFF9EC9FF), Color(0xFFB9A6FF), Color(0xFFFFC2E0)), startY = top, endY = bottom), Offset(0f, top), Size(w, h))
+            val bands = listOf(Color(0xFFFF5F6D), Color(0xFFFF8A3D), Color(0xFFFFD84D), Color(0xFF2EE59D), Color(0xFF4FC3F7), Color(0xFF8E7CFF))
+            repeat((count / 4).coerceAtLeast(2)) {
+                val c = Offset(rng.nextFloat() * w, anyY())
+                val r = (60 + rng.nextFloat() * 40) * u
+                bands.forEachIndexed { k, col ->
+                    val rr = r - k * 6 * u
+                    drawArc(col.copy(alpha = 0.75f), 180f, 180f, false, Offset(c.x - rr, c.y - rr), Size(rr * 2, rr * 2), style = Stroke(6 * u))
+                }
+            }
+            repeat(count / 2) {
+                val c = Offset(rng.nextFloat() * w, anyY())
+                drawOval(Color(0xCCFFFFFF), Offset(c.x - 34 * u, c.y - 10 * u), Size(68 * u, 22 * u))
+                drawOval(Color(0xCCFFFFFF), Offset(c.x - 16 * u, c.y - 22 * u), Size(36 * u, 26 * u))
+            }
+            repeat(count * 2) {
+                val c = Offset(rng.nextFloat() * w, anyY())
+                val r = (2 + rng.nextFloat() * 3) * u
+                drawLine(Color.White, Offset(c.x - r, c.y), Offset(c.x + r, c.y), 1.5f * u)
+                drawLine(Color.White, Offset(c.x, c.y - r), Offset(c.x, c.y + r), 1.5f * u)
+            }
+        }
+        else -> { // Roo's Outback home: a sunset over red earth, gum trees and big rocks.
+            drawRect(Brush.verticalGradient(listOf(Color(0xFF6A3D7A), Color(0xFFE0784A), Color(0xFFB8532C)), startY = top, endY = bottom), Offset(0f, top), Size(w, h))
+            repeat((count / 4).coerceAtLeast(2)) {
+                val x = rng.nextFloat() * w
+                val y = anyY()
+                val s = (50 + rng.nextFloat() * 40) * u
+                drawRoundRect(Color(0xFFA8432A), Offset(x - s, y - s * 0.5f), Size(s * 2, s * 0.6f), CornerRadius(s * 0.3f))
+            }
+            repeat(count) {
+                val x = sideX()
+                val y = anyY()
+                drawLine(Color(0xFFE8DCCB), Offset(x, y), Offset(x - 2 * u, y - 34 * u), 4 * u, StrokeCap.Round)
+                drawCircle(Color(0xFF6E8F4E), 12 * u, Offset(x - 8 * u, y - 36 * u))
+                drawCircle(Color(0xFF7FA35A), 14 * u, Offset(x + 6 * u, y - 40 * u))
+            }
+            repeat(count * 2) { drawCircle(Color(0x66FFE6B3), (1 + rng.nextFloat() * 1.5f) * u, Offset(rng.nextFloat() * w, anyY())) }
         }
     }
 }
@@ -412,7 +595,7 @@ fun PouchScreen(vm: ClearooViewModel, onBack: () -> Unit, onReview: () -> Unit) 
     val slicedBytes = s?.pouch?.sumOf { byId[it]?.sizeBytes ?: 0L } ?: 0L
 
     Column(Modifier.fillMaxSize().systemBarsPadding()) {
-        TopBar("Roo's Pouch", onBack) {
+        GameTopBar("Roo's Pouch", onBack) {
             if (phase == Phase.Playing && s != null) {
                 Pill("⏱ ${s.secondsLeft.toInt()}s", Surface2, Modifier.padding(end = 12.dp))
             }
@@ -511,11 +694,11 @@ fun PouchScreen(vm: ClearooViewModel, onBack: () -> Unit, onReview: () -> Unit) 
             }
 
             when (phase) {
-                Phase.Loading -> Overlay {
+                Phase.Loading -> GameOverlay {
                     Mascot(Mood.HOPEFUL, size = 120.dp)
                     Text("Roo is picking photos…", style = MaterialTheme.typography.titleMedium, color = TextHi)
                 }
-                Phase.Intro -> Overlay {
+                Phase.Intro -> GameOverlay {
                     if (items.isEmpty()) {
                         SpeechBubble("No photos to play with right now. Your gallery is spotless! ✨")
                         Mascot(Mood.PROUD, size = 120.dp)
@@ -540,7 +723,7 @@ fun PouchScreen(vm: ClearooViewModel, onBack: () -> Unit, onReview: () -> Unit) 
                         )
                     }
                 }
-                Phase.Over -> Overlay {
+                Phase.Over -> GameOverlay {
                     val count = s?.pouch?.size ?: 0
                     Text(
                         if (count > bestBefore && count > 0) "New best! 🏆" else if (count > 0) "Round over!" else "Nothing sliced",
@@ -580,7 +763,7 @@ fun PouchScreen(vm: ClearooViewModel, onBack: () -> Unit, onReview: () -> Unit) 
 }
 
 @Composable
-private fun Overlay(content: @Composable () -> Unit) {
+internal fun GameOverlay(content: @Composable () -> Unit) {
     Column(
         Modifier.fillMaxSize().background(Color(0xCC130F1E)).padding(24.dp),
         verticalArrangement = Arrangement.Center,

@@ -13,7 +13,18 @@ object ClimbRules {
         World("Desert", "🌵", 100),
         World("Snow peaks", "🏔️", 300),
         World("Space", "🚀", 600),
+        World("Ocean", "🌊", 1_000),
+        World("Volcano", "🌋", 1_600),
+        World("Candy land", "🍭", 2_500),
+        World("Rainbow sky", "🌈", 3_500),
+        World("Roo's Outback home", "🏡", 5_000),
     )
+
+    /** Reaching Roo's home is the top of the mountain. */
+    const val SUMMIT = 5_000
+
+    /** Worlds first reached when going from [before] to [after] hops. */
+    fun worldsEntered(before: Int, after: Int): List<World> = WORLDS.filter { it.startHop in (before + 1)..after }
 
     private val REWARDS = listOf("🎈", "🌟", "🍀", "🎉", "🏅", "🌈", "🍉", "🎵")
 

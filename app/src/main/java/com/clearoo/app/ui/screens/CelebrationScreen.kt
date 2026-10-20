@@ -61,8 +61,12 @@ fun CelebrationScreen(
             verticalArrangement = Arrangement.Center,
         ) {
             val unlocked = result?.unlocked?.lastOrNull()
+            val hopsAfter = vm.progress.value.totalDeleted
+            val entered = result?.let { ClimbRules.worldsEntered(hopsAfter - it.count, hopsAfter).lastOrNull() }
             val line = when {
                 result == null -> "Cleaning up… 🧹"
+                entered?.startHop == ClimbRules.SUMMIT -> "You made it to my Outback home! 🏡 The summit!"
+                entered != null -> "We hopped into ${entered.name}! ${entered.emoji}"
                 unlocked != null -> "Ooh, a new outfit! ${unlocked.emoji}"
                 result.streakGrew && result.streak > 1 -> "${result.streak}-day streak! You're on fire 🔥"
                 result.streakGrew -> "Streak started! See you tomorrow 🔥"
@@ -100,7 +104,9 @@ fun CelebrationScreen(
                 val flags = ClimbRules.milestonesPassed(after - result.count, after)
                 Spacer(Modifier.height(16.dp))
                 Pill(
-                    if (flags.isNotEmpty()) {
+                    if (entered != null) {
+                        "${entered.emoji} New world on Roo's Climb: ${entered.name}!"
+                    } else if (flags.isNotEmpty()) {
                         "🚩 New flag on Roo's Climb! ${ClimbRules.reward(flags.last())}"
                     } else {
                         "🏔️ Roo climbed ${result.count} ${if (result.count == 1) "hop" else "hops"}"

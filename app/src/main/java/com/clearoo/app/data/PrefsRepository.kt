@@ -127,6 +127,8 @@ class PrefsRepository(context: Context) {
         val ONBOARDED = booleanPreferencesKey("onboarded")
         val OUTFIT = stringPreferencesKey("outfit")
         val POUCH_BEST = intPreferencesKey("pouch_best")
+        val SEEN_OUTFITS = stringSetPreferencesKey("seen_outfits")
+        fun puzzleBest(size: Int) = intPreferencesKey("puzzle_best_$size")
     }
 
     /** Keys in the device-only store. */
@@ -152,6 +154,25 @@ class PrefsRepository(context: Context) {
 
     /** Most photos sliced in one round of Roo's Pouch. */
     val pouchBest: Flow<Int> = store.data.map { p -> p[Keys.POUCH_BEST] ?: 0 }.distinctUntilChanged()
+
+    /** Outfits whose unlock the user has already been shown. */
+    val seenOutfits: Flow<Set<String>> = store.data.map { p -> p[Keys.SEEN_OUTFITS].orEmpty() }.distinctUntilChanged()
+
+    suspend fun markOutfitsSeen(names: Collection<String>) {
+        store.edit { p -> p[Keys.SEEN_OUTFITS] = p[Keys.SEEN_OUTFITS].orEmpty() + names }
+    }
+
+    /** Fastest solve in seconds for each puzzle size; missing = never solved. */
+    val puzzleBest: Flow<Map<Int, Int>> = store.data.map { p ->
+        com.clearoo.app.domain.PuzzleRules.SIZES.mapNotNull { n -> p[Keys.puzzleBest(n)]?.let { n to it } }.toMap()
+    }.distinctUntilChanged()
+
+    suspend fun recordPuzzle(size: Int, seconds: Int) {
+        store.edit { p ->
+            val key = Keys.puzzleBest(size)
+            if (seconds < (p[key] ?: Int.MAX_VALUE)) p[key] = seconds
+        }
+    }
 
     suspend fun recordPouch(count: Int) {
         store.edit { p -> if (count > (p[Keys.POUCH_BEST] ?: 0)) p[Keys.POUCH_BEST] = count }

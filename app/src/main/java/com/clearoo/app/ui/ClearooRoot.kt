@@ -31,13 +31,16 @@ import com.clearoo.app.ui.screens.OnboardingScreen
 import com.clearoo.app.ui.screens.ReviewScreen
 import com.clearoo.app.ui.screens.SettingsScreen
 import com.clearoo.app.ui.screens.ClimbScreen
+import com.clearoo.app.ui.screens.OutfitUnlockedDialog
+import com.clearoo.app.ui.screens.GamesScreen
 import com.clearoo.app.ui.screens.PouchScreen
+import com.clearoo.app.ui.screens.PuzzleScreen
 import com.clearoo.app.ui.screens.SwipeScreen
 import com.clearoo.app.ui.screens.UnusedAppsScreen
 import com.clearoo.app.ui.screens.WardrobeScreen
 import com.clearoo.app.ui.theme.Bg
 
-enum class Screen { Loading, Onboarding, Home, Swipe, Review, Celebrate, Settings, Wardrobe, Albums, NewAlbum, Album, UnusedApps, Climb, Pouch }
+enum class Screen { Loading, Onboarding, Home, Swipe, Review, Celebrate, Settings, Wardrobe, Albums, NewAlbum, Album, UnusedApps, Climb, Pouch, Games, Puzzle }
 
 @Composable
 fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> Unit) {
@@ -65,7 +68,7 @@ fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> U
             Screen.Review -> reviewBack
             Screen.Swipe -> swipeParent()
             Screen.NewAlbum, Screen.Album -> Screen.Albums
-            Screen.Pouch -> Screen.Home
+            Screen.Pouch, Screen.Puzzle -> Screen.Games
             else -> Screen.Home
         }
     }
@@ -93,7 +96,7 @@ fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> U
                     onAlbums = { screen = Screen.Albums },
                     onUnusedApps = { screen = Screen.UnusedApps },
                     onClimb = { screen = Screen.Climb },
-                    onPouch = { screen = Screen.Pouch },
+                    onGames = { screen = Screen.Games },
                 )
                 Screen.Swipe -> SwipeScreen(
                     vm,
@@ -117,12 +120,20 @@ fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> U
                 )
                 Screen.Settings -> SettingsScreen(vm, onBack = { screen = Screen.Home })
                 Screen.Wardrobe -> WardrobeScreen(vm, onBack = { screen = Screen.Home })
-                Screen.Climb -> ClimbScreen(vm, onBack = { screen = Screen.Home }, onPlay = { screen = Screen.Pouch })
-                Screen.Pouch -> PouchScreen(
+                Screen.Climb -> ClimbScreen(vm, onBack = { screen = Screen.Home }, onPlay = { screen = Screen.Games })
+                Screen.Games -> GamesScreen(
                     vm,
                     onBack = { screen = Screen.Home },
+                    onPouch = { screen = Screen.Pouch },
+                    onPuzzle = { screen = Screen.Puzzle },
+                    onClimb = { screen = Screen.Climb },
+                )
+                Screen.Puzzle -> PuzzleScreen(vm, onBack = { screen = Screen.Games })
+                Screen.Pouch -> PouchScreen(
+                    vm,
+                    onBack = { screen = Screen.Games },
                     onReview = {
-                        reviewBack = Screen.Home
+                        reviewBack = Screen.Games
                         screen = Screen.Review
                     },
                 )
@@ -154,6 +165,20 @@ fun ClearooRoot(vm: ClearooViewModel, openSwipe: Boolean, onSwipeOpened: () -> U
                     },
                 )
             }
+        }
+
+        // A new outfit is always announced, whichever action earned it.
+        val unseen by vm.unseenOutfits.collectAsStateWithLifecycle()
+        val pending = unseen.orEmpty()
+        if (pending.isNotEmpty() && screen in setOf(Screen.Home, Screen.Celebrate)) {
+            OutfitUnlockedDialog(
+                pending,
+                onWear = {
+                    vm.wear(it)
+                    vm.markOutfitsSeen(pending)
+                },
+                onLater = { vm.markOutfitsSeen(pending) },
+            )
         }
     }
 }

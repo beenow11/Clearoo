@@ -78,7 +78,7 @@ fun HomeScreen(
     onAlbums: () -> Unit,
     onUnusedApps: () -> Unit,
     onClimb: () -> Unit,
-    onPouch: () -> Unit,
+    onGames: () -> Unit,
 ) {
     val context = LocalContext.current
     val progress by vm.progress.collectAsStateWithLifecycle()
@@ -127,8 +127,8 @@ fun HomeScreen(
         Spacer(Modifier.height(12.dp))
         SpeechBubble(line, Modifier.padding(horizontal = 12.dp))
         // Tapping Roo starts Roo's Pouch; the wardrobe has its own 👕 button above.
-        Mascot(mood, Modifier.pressable(onClick = onPouch), size = 190.dp)
-        Pill("🎮 Tap Roo to play", Surface2, Modifier.pressable(onClick = onPouch))
+        Mascot(mood, Modifier.pressable(onClick = onGames), size = 190.dp)
+        Pill("🎮 Tap Roo to play", Surface2, Modifier.pressable(onClick = onGames))
         Spacer(Modifier.height(8.dp))
         WeekStrip(progress.goalDays, today)
         Spacer(Modifier.height(16.dp))

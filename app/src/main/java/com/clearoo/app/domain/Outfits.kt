@@ -36,6 +36,10 @@ object OutfitRules {
         Goal.TOTAL_FREED -> "Free ${outfit.target shr 30} GB"
     }
 
+    /** Unlocked outfits the user hasn't been shown yet ([seen] holds outfit names). */
+    fun unseen(p: Progress, seen: Set<String>): List<Outfit> =
+        Outfit.entries.filter { it.goal != Goal.NONE && isUnlocked(it, p) && it.name !in seen }
+
     fun newlyUnlocked(before: Progress, after: Progress): List<Outfit> =
         Outfit.entries.filter { !isUnlocked(it, before) && isUnlocked(it, after) }
 }

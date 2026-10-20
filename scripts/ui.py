@@ -6,6 +6,7 @@
   ui.py expect TEXT    wait until TEXT is on screen
   ui.py shot NAME      save a screenshot and print the visible text
   ui.py label TEXT     print the first on-screen text containing TEXT (empty if none)
+  ui.py solve          solve Roo's Puzzle by swapping its pieces into place
 """
 import os
 import re
@@ -114,9 +115,35 @@ def cards():
             print(f"  card {d} bounds={n.get('bounds')}")
 
 
+def solve():
+    """Each puzzle piece is described as "Piece P at Q": swap until every P sits at Q."""
+    for _ in range(80):
+        ns = nodes()
+        at, where = {}, {}
+        for n in ns:
+            m = re.match(r"Piece (\d+) at (\d+)", n.get("content-desc") or "")
+            if m:
+                piece, pos = int(m[1]), int(m[2])
+                at[pos] = n
+                where[piece] = pos
+        wrong = [p for p in sorted(at) if int(re.match(r"Piece (\d+)", at[p].get("content-desc"))[1]) != p]
+        if not at or not wrong:
+            print(f"ok: solve ({len(at)} pieces)")
+            return
+        pos = wrong[0]
+        for target in (at[pos], at[where[pos]]):
+            x, y = center(target)
+            adb("shell", "input", "tap", str(x), str(y))
+            time.sleep(0.6)
+        time.sleep(0.6)
+    fail("puzzle not solved", nodes())
+
+
 if __name__ == "__main__":
     cmd, arg = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""
-    if cmd == "shot":
+    if cmd == "solve":
+        solve()
+    elif cmd == "shot":
         shot(arg)
     elif cmd == "cards":
         cards()

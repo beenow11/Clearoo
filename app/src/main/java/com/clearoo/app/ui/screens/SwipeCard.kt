@@ -163,6 +163,7 @@ fun MediaCard(
     onToggleMute: () -> Unit,
     onBroken: () -> Unit,
     progress: () -> Float,
+    onOpen: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(28.dp)
@@ -177,6 +178,8 @@ fun MediaCard(
             .background(Surface1)
             .pointerInput(item.id, play, broken) {
                 detectTapGestures(
+                    // Hold to look at the photo full screen.
+                    onLongPress = { if (!broken) onOpen() },
                     onTap = {
                         when {
                             broken -> Unit

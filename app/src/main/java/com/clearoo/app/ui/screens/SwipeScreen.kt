@@ -107,6 +107,8 @@ fun SwipeScreen(vm: ClearooViewModel, onBack: () -> Unit, onOpenBin: () -> Unit)
     val haptic = LocalHapticFeedback.current
     var deckWidth by remember { mutableFloatStateOf(0f) }
     var muted by remember { mutableStateOf(true) }
+    var viewing by remember { mutableStateOf<com.clearoo.app.data.MediaItem?>(null) }
+    viewing?.let { PhotoViewer(it, onClose = { viewing = null }) }
 
     val top = vm.deck.firstOrNull()
     val undone = vm.lastUndone
@@ -258,6 +260,12 @@ fun SwipeScreen(vm: ClearooViewModel, onBack: () -> Unit, onOpenBin: () -> Unit)
                                 tapToPlay = vm.tapToPlay,
                                 onToggleMute = { muted = !muted },
                                 onBroken = { vm.markBroken(item) },
+                                onOpen = {
+                                    if (i == 0) {
+                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                        viewing = item
+                                    }
+                                },
                                 progress = { if (i == 0) topState.progress(deckWidth) else 0f },
                                 modifier = Modifier.fillMaxSize().then(cardModifier),
                             )

@@ -67,6 +67,11 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
     val settings: StateFlow<AppSettings?> =
         prefs.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val pouchBest: StateFlow<Int> = prefs.pouchBest.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+    val puzzleBest: StateFlow<Map<Int, Int>> = prefs.puzzleBest.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+    /** Outfits unlocked but not yet announced; null until the stored list has loaded. */
+    val unseenOutfits: StateFlow<List<Outfit>?> =
+        kotlinx.coroutines.flow.combine(prefs.progress, prefs.seenOutfits) { p, seen -> OutfitRules.unseen(p, seen) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val albums: StateFlow<List<Album>> =
         prefs.albums.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -449,6 +454,31 @@ class ClearooViewModel(app: Application) : AndroidViewModel(app) {
         appsFreed += app.sizeBytes
         installedApps = installedApps?.filter { it.packageName != app.packageName }
         storage = Device.storage()
+    }
+
+    fun markOutfitsSeen(outfits: List<Outfit>) {
+        viewModelScope.launch { prefs.markOutfitsSeen(outfits.map { it.name }) }
+    }
+
+    /** A random photo for Roo's Puzzle: not a screenshot, video, broken file or one already in the bin. */
+    suspend fun puzzlePhoto(): MediaItem? = runCatching {
+        media.batch(Deck.RANDOM, pending.map { it.id }.toSet(), 40, System.currentTimeMillis())
+            .firstOrNull { !it.isVideo && !it.isBroken && !com.clearoo.app.domain.DeckRules.isScreenshot(it.meta) }
+    }.getOrNull()
+
+    fun recordPuzzle(size: Int, seconds: Int) {
+        viewModelScope.launch { prefs.recordPuzzle(size, seconds) }
+    }
+
+    /** After a puzzle: keep the photo (never shown in decks again) or drop it in the bin. */
+    fun puzzleVerdict(item: MediaItem, keep: Boolean) {
+        swiped += item.id
+        if (keep) {
+            viewModelScope.launch { prefs.addKept(item.id) }
+        } else if (pending.none { it.id == item.id }) {
+            pending.add(item)
+            saveBin()
+        }
     }
 
     /** Photos for a round of Roo's Pouch: likely junk first, never videos, favourites or kept photos. */

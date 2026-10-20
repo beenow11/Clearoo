@@ -69,6 +69,14 @@ swipe() {
 $UI tap "Start swiping"
 $UI expect "Quick mix"
 $UI shot 03-deck
+# Long-press the top card to look at it full screen (broken cards have nothing to show).
+if [ -z "$(python3 scripts/ui.py label "Safe to delete")" ]; then
+  adb shell input swipe $((W / 2)) $((H / 2)) $((W / 2)) $((H / 2)) 1200
+  $UI expect "to zoom"
+  $UI shot 03b-viewer
+  adb shell input keyevent KEYCODE_BACK; sleep 1
+  $UI expect "Quick mix"
+fi
 # An overloaded emulator occasionally drops most of a drag's touch points; one retry covers
 # that, and a real bug still fails both attempts. Keeps are checked via the top card changing.
 top_card() { python3 scripts/ui.py cards | tail -1; }
@@ -214,6 +222,9 @@ $UI expect "Today's clean-up"
 
 echo "== Roo's Pouch"
 home_tap "Tap Roo to play"
+$UI expect "Play with Roo"            # the games hub
+$UI shot 17e-games
+$UI tap "Roo's Pouch"
 UI_TIMEOUT=60 $UI expect "Start slicing"
 $UI shot 17e-pouch-intro
 $UI tap "Start slicing"
@@ -229,10 +240,27 @@ if [ -n "$(python3 scripts/ui.py label "Review & move to trash")" ]; then
   $UI tap "Review & move to trash"
   $UI expect "The bin"
   $UI shot 17g-pouch-bin
-  adb shell input keyevent KEYCODE_BACK; sleep 1   # back to Home, the bin is kept
+  adb shell input keyevent KEYCODE_BACK; sleep 1   # back to the games, the bin is kept
 else
   $UI tap "Done"
 fi
+$UI expect "Play with Roo"
+
+echo "== Roo's Puzzle"
+$UI tap "Roo's Puzzle"
+$UI expect "How many pieces?"
+$UI tapx "2×2"
+$UI tap "Start puzzle"
+UI_TIMEOUT=40 $UI expect "Hold to peek"
+$UI shot 17h-puzzle
+$UI solve
+$UI expect "Solved!"
+$UI shot 17i-puzzle-solved
+$UI tap "Keep it"
+$UI expect "Play again"
+adb shell input keyevent KEYCODE_BACK; sleep 1   # back to the games
+$UI expect "Play with Roo"
+adb shell input keyevent KEYCODE_BACK; sleep 1   # and Home
 $UI expect "Today's clean-up"
 
 echo "== Phone storage full"

@@ -12,9 +12,10 @@ class GamesTest {
     fun `worlds and milestones follow the hop count`() {
         assertEquals("Meadow", ClimbRules.worldFor(0).name)
         assertEquals("Desert", ClimbRules.worldFor(100).name)
-        assertEquals("Space", ClimbRules.worldFor(5_000).name)
+        assertEquals("Space", ClimbRules.worldFor(999).name)
         assertEquals("Snow peaks", ClimbRules.nextWorld(150)?.name)
-        assertNull(ClimbRules.nextWorld(700))
+        assertEquals("Ocean", ClimbRules.nextWorld(700)?.name)
+        assertNull(ClimbRules.nextWorld(6_000))
         assertEquals(25, ClimbRules.nextMilestone(0))
         assertEquals(50, ClimbRules.nextMilestone(25))
         assertEquals(listOf(25, 50), ClimbRules.milestonesPassed(20, 51))
