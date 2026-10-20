@@ -131,17 +131,25 @@ UI_TIMEOUT=3 $UI expect "Send feedback" >/dev/null 2>&1 || { adb shell input key
 $UI expect "Send feedback"
 adb shell input keyevent KEYCODE_BACK; sleep 1
 
+# Home grows as features are added, so scroll to the top, then down until the tile shows.
+home_tap() {
+  for _ in 1 2 3; do adb shell input swipe $((W / 2)) $((H / 4)) $((W / 2)) $((H * 3 / 4)) 200; done
+  sleep 1
+  for _ in 1 2 3 4 5 6; do
+    if [ -n "$(python3 scripts/ui.py label "$1")" ]; then $UI tap "$1"; return; fi
+    adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 2)) 300; sleep 1
+  done
+  $UI tap "$1"
+}
+
 echo "== Smart deck"
-adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 4)) 300; sleep 1
-$UI tap "Screenshots"
+home_tap "Screenshots"
 $UI expect "Screenshots ·"
 $UI shot 11-screenshots-deck
 adb shell input keyevent KEYCODE_BACK; sleep 1
 
 echo "== Broken files deck"
-adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 4)) 300; sleep 1
-adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 2)) 300; sleep 1
-$UI tap "Broken files"
+home_tap "Broken files"
 $UI expect "Safe to delete"      # a broken card, not a grey square
 $UI shot 12-broken-deck
 $UI tap "🩹 Bin "
@@ -150,8 +158,7 @@ $UI shot 13-broken-binned
 adb shell input keyevent KEYCODE_BACK; sleep 1
 
 echo "== Albums"
-adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 4)) 300; sleep 1
-$UI tap "Albums"
+home_tap "Albums"
 $UI tap "New album"
 $UI tap "Album name"
 adb shell input text London; sleep 1
@@ -185,8 +192,7 @@ adb shell input keyevent KEYCODE_BACK; sleep 1
 $UI expect "Today's clean-up"
 
 echo "== Unused apps"
-adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 2)) 300; sleep 1
-$UI tap "Unused apps"
+home_tap "Unused apps"
 $UI expect "Allow usage access"       # asks for Usage access first
 $UI shot 17b-unused-apps-locked
 adb shell appops set "$PKG" GET_USAGE_STATS allow
@@ -200,15 +206,14 @@ adb shell input keyevent KEYCODE_BACK; sleep 1
 $UI expect "Today's clean-up"
 
 echo "== Roo's Climb"
-adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 2)) 300; sleep 1
-$UI tap "Roo's Climb"
+home_tap "Roo's Climb"
 $UI expect "hops · next flag"
 $UI shot 17d-climb
 adb shell input keyevent KEYCODE_BACK; sleep 1
 $UI expect "Today's clean-up"
 
 echo "== Roo's Pouch"
-$UI tap "Tap Roo to play"
+home_tap "Tap Roo to play"
 UI_TIMEOUT=60 $UI expect "Start slicing"
 $UI shot 17e-pouch-intro
 $UI tap "Start slicing"
