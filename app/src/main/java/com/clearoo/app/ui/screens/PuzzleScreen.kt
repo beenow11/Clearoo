@@ -342,7 +342,7 @@ fun PuzzleScreen(vm: ClearooViewModel, onBack: () -> Unit) {
             }
         }
     }
-    if (phase == PuzzlePhase.Solved) Confetti(Modifier.fillMaxSize(), key = puzzle)
+    if (phase == PuzzlePhase.Solved) Confetti(Modifier.fillMaxSize(), key = puzzle ?: Unit)
 }
 
 /** The square board. Each piece slides to its new spot when swapped. */
